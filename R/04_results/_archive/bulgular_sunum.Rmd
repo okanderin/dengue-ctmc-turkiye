@@ -1,0 +1,497 @@
+---
+title: "Türkiye'de Dengue Yerleşme Riski: CTMC Spark Modeli Bulguları"
+subtitle: "CMIP6 SSP1-2.6 / SSP2-4.5 / SSP5-8.5 senaryoları altında beş sentinel ilçe (2025-2075)"
+author: "Okan Derin"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    number_sections: true
+    df_print: kable
+    fig_width: 9
+    fig_height: 5.5
+    code_folding: hide
+lang: tr
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo    = FALSE,
+  message = FALSE,
+  warning = FALSE,
+  fig.align = "center",
+  dpi     = 150
+)
+
+Sys.setlocale("LC_ALL", "tr_TR.UTF-8")
+options(encoding = "UTF-8", scipen = 999)
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(tidyr)
+  library(knitr)
+  library(kableExtra)
+})
+
+# ---- Yollar --------------------------------------------------------------
+DIR_OUT   <- "outputs"
+DIR_CROSS <- file.path(DIR_OUT, "cross_scenario")
+DIR_TBL   <- file.path(DIR_OUT, "tables")
+
+SSP_DIRS <- c(ssp126 = "ssp126", ssp245 = "ssp245", ssp585 = "ssp585")
+SSP_ETIKET <- c(ssp126 = "SSP1-2.6", ssp245 = "SSP2-4.5", ssp585 = "SSP5-8.5")
+
+# ---- Savunmacı okuma yardımcıları ---------------------------------------
+# Amaç: bir analiz betiği çalışmamışsa rapor sessizce ESKİ veriyi göstermek
+# yerine görünür bir uyarı bassın. "Hangi adım çalışmadı" sorusu burada
+# yanıtlanır.
+
+.eksik_not <- function(yol) {
+  cat(sprintf(
+    "\n> **Dosya bulunamadı:** `%s` — ilgili analiz betiği çalıştırılmamış olabilir.\n\n",
+    yol
+  ))
+  invisible(NULL)
+}
+
+oku <- function(yol) {
+  if (!file.exists(yol)) return(NULL)
+  uzanti <- tolower(tools::file_ext(yol))
+  out <- try({
+    if (uzanti == "rds") {
+      readRDS(yol)
+    } else if (uzanti == "csv") {
+      read.csv(yol, fileEncoding = "UTF-8", check.names = FALSE)
+    } else {
+      NULL
+    }
+  }, silent = TRUE)
+  if (inherits(out, "try-error")) return(NULL)
+  out
+}
+
+tablo <- function(yol, baslik = NULL, digits = 3, n_max = NULL) {
+  d <- oku(yol)
+  if (is.null(d)) return(.eksik_not(yol))
+  if (!is.null(n_max) && nrow(d) > n_max) d <- head(d, n_max)
+  k <- kable(d, digits = digits, caption = baslik, format = "html")
+  print(kable_styling(k, bootstrap_options = c("striped", "condensed"),
+                      full_width = FALSE, position = "center"))
+  invisible(d)
+}
+
+sekil <- function(yol, altyazi = NULL) {
+  if (!file.exists(yol)) return(.eksik_not(yol))
+  knitr::include_graphics(yol)
+}
+
+# Dosya tazelik bilgisi: çıktı ne zaman üretilmiş?
+tazelik <- function(yollar) {
+  data.frame(
+    Dosya      = yollar,
+    Mevcut     = ifelse(file.exists(yollar), "evet", "HAYIR"),
+    `Son değişiklik` = ifelse(
+      file.exists(yollar),
+      format(file.mtime(yollar), "%Y-%m-%d %H:%M"),
+      "-"
+    ),
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
+}
+```
+
+# Kapsam ve okuma notu
+
+Bu rapor **yalnızca `R/04_results/` altındaki analiz çıktılarını** sunar. Veri
+kurulumu (`R/02_data/`) ve model koşumu (`R/03_models/`) daha önce tamamlanmış
+kabul edilir; bu rapor onları yeniden çalıştırmaz, yalnızca diskteki çıktı
+dosyalarını okur.
+
+Bir bölümde tablo veya şekil yerine **"Dosya bulunamadı"** uyarısı görürsen, o
+bölümü üreten betik henüz çalıştırılmamış demektir. Aşağıdaki envanter tablosu
+hangi çıktının ne zaman üretildiğini gösterir; bu, eski sonuçların rapora
+sızmasını önlemek için konuldu.
+
+## Çıktı envanteri ve tazelik kontrolü
+
+```{r envanter}
+kritik_dosyalar <- c(
+  file.path(DIR_OUT, SSP_DIRS, "model_results", "ctmc_spark_horizon_2025_2075.rds"),
+  file.path(DIR_OUT, SSP_DIRS, "simulation",    "ctmc_spark_horizon_2025_2075_rep1000.rds"),
+  file.path(DIR_OUT, SSP_DIRS, "tables",        "tbl_horizon.csv"),
+  file.path(DIR_OUT, SSP_DIRS, "tables",        "tbl_prcc.csv"),
+  file.path(DIR_OUT, SSP_DIRS, "validation",    "validation_stage1_summary.csv"),
+  file.path(DIR_OUT, SSP_DIRS, "sensitivity", "ctmc_mc", "sensitivity_summary.csv")
+)
+
+env <- tazelik(kritik_dosyalar)
+kable(env, format = "html", row.names = FALSE) |>
+  kable_styling(bootstrap_options = c("striped", "condensed"), full_width = FALSE)
+```
+
+```{r envanter-uyari, results='asis'}
+eksik <- env$Dosya[env$Mevcut == "HAYIR"]
+if (length(eksik) > 0) {
+  cat("\n**Uyarı:** aşağıdaki kritik çıktılar eksik:\n\n")
+  cat(paste0("- `", eksik, "`\n"), sep = "")
+} else {
+  cat("\nTüm kritik çıktılar mevcut.\n")
+}
+```
+
+---
+
+# Ana bulgu: ufuk boyu yerleşme olasılığı ($P_{ufuk}$)
+
+Elli yıllık ufukta (2025-2075) her sentinel ilçe için kümülatif yerleşme
+olasılığı. Senaryo başına ayrı tablolar verilmiştir.
+
+```{r horizon-tablolar, results='asis'}
+for (s in names(SSP_DIRS)) {
+  cat(sprintf("\n## %s {-}\n\n", SSP_ETIKET[[s]]))
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "tables", "tbl_horizon.csv"),
+    baslik = sprintf("%s — ilçe bazında 50 yıllık P_ufuk", SSP_ETIKET[[s]])
+  )
+}
+```
+
+## Senaryolar arası karşılaştırma
+
+```{r fig-yearly-cross}
+sekil(file.path(DIR_CROSS, "fig_yearly_risk_comparison.png"))
+```
+
+```{r fig-decade-cross}
+sekil(file.path(DIR_CROSS, "fig_decade_progression_3ssp.png"))
+```
+
+```{r fig-forest}
+sekil(file.path(DIR_CROSS, "fig_forest.png"))
+```
+
+---
+
+# Yıllık ve on yıllık risk gidişatı
+
+```{r decade-tablolar, results='asis'}
+for (s in names(SSP_DIRS)) {
+  cat(sprintf("\n## %s {-}\n\n", SSP_ETIKET[[s]]))
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "tables", "tbl_decade.csv"),
+    baslik = sprintf("%s — on yıllık dilimlerde risk", SSP_ETIKET[[s]])
+  )
+}
+```
+
+```{r fig-yearly-per-ssp, results='asis'}
+for (s in names(SSP_DIRS)) {
+  y <- file.path(DIR_OUT, SSP_DIRS[[s]], "figures", "fig_yearly_risk.png")
+  if (file.exists(y)) {
+    cat(sprintf("\n**%s**\n\n", SSP_ETIKET[[s]]))
+    cat(sprintf("![](%s)\n\n", y))
+  }
+}
+```
+
+---
+
+# Mevsimsellik ve iklim uygunluk indeksi (CSI)
+
+```{r sezon-tablolar, results='asis'}
+for (s in names(SSP_DIRS)) {
+  cat(sprintf("\n## %s {-}\n\n", SSP_ETIKET[[s]]))
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "tables", "tbl_season.csv"),
+    baslik = sprintf("%s — aylık mevsimsel profil", SSP_ETIKET[[s]])
+  )
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "tables", "tbl_csi_monthly.csv"),
+    baslik = sprintf("%s — aylık CSI", SSP_ETIKET[[s]])
+  )
+}
+```
+
+## Senaryolar arası mevsimsellik
+
+```{r fig-pest-season}
+sekil(file.path(DIR_CROSS, "fig_pest_season_cross.png"))
+```
+
+```{r fig-csi-heat}
+sekil(file.path(DIR_CROSS, "combined_plot_csi_heat_vertical_tr.png"))
+```
+
+```{r fig-temp-rh}
+sekil(file.path(DIR_CROSS, "combined_plot_temp_rh_profile_vertical.png"))
+```
+
+## Yağış katkılı CSI (3 vs 4 bileşen)
+
+```{r csi-rainfall, results='asis'}
+for (s in names(SSP_DIRS)) {
+  cat(sprintf("\n**%s**\n\n", SSP_ETIKET[[s]]))
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "rainfall_CSI", "CSI_comparison_3vs4.csv"),
+    baslik = sprintf("%s — CSI 3 bileşen vs 4 bileşen (yağış dahil)", SSP_ETIKET[[s]])
+  )
+}
+```
+
+---
+
+# İthalat baskısı (importation pressure)
+
+```{r import-tablolar, results='asis'}
+for (s in names(SSP_DIRS)) {
+  cat(sprintf("\n## %s {-}\n\n", SSP_ETIKET[[s]]))
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "tables", "tbl_import_summary.csv"),
+    baslik = sprintf("%s — ithalat baskısı özeti", SSP_ETIKET[[s]])
+  )
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "tables", "tbl_country_contrib.csv"),
+    baslik = sprintf("%s — kaynak ülke katkıları", SSP_ETIKET[[s]]),
+    n_max = 20
+  )
+}
+```
+
+```{r fig-country}
+sekil(file.path(DIR_OUT, "ssp245", "figures", "fig_country_contrib.png"))
+```
+
+## İthalat duyarlılığı (eta ve k parametreleri)
+
+```{r import-sens, results='asis'}
+for (s in names(SSP_DIRS)) {
+  yol <- file.path(DIR_OUT, SSP_DIRS[[s]], "sensitivity", "importation",
+                   sprintf("sensitivity_summary_%s.csv", SSP_DIRS[[s]]))
+  cat(sprintf("\n**%s**\n\n", SSP_ETIKET[[s]]))
+  tablo(yol, baslik = sprintf("%s — ithalat parametre duyarlılığı", SSP_ETIKET[[s]]))
+}
+```
+
+---
+
+# Duyarlılık analizleri
+
+## PRCC (Latin hiperküp örneklemesi)
+
+```{r prcc-tablolar, results='asis'}
+for (s in names(SSP_DIRS)) {
+  cat(sprintf("\n### %s {-}\n\n", SSP_ETIKET[[s]]))
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "tables", "tbl_prcc.csv"),
+    baslik = sprintf("%s — PRCC katsayıları", SSP_ETIKET[[s]])
+  )
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "tables", "tbl_prcc_param_ranges.csv"),
+    baslik = sprintf("%s — PRCC parametre aralıkları", SSP_ETIKET[[s]])
+  )
+}
+```
+
+```{r fig-prcc-combined}
+sekil(file.path(DIR_CROSS, "combined_fig_prcc.png"))
+```
+
+## OAT (tek parametre değiştirme) ve tornado
+
+```{r fig-oat-heatmap}
+sekil(file.path(DIR_CROSS, "fig_oat_heatmap.png"))
+```
+
+```{r fig-oat-profile}
+sekil(file.path(DIR_CROSS, "fig_oat_m_profile.png"))
+```
+
+```{r oat-tornado, results='asis'}
+for (s in names(SSP_DIRS)) {
+  cat(sprintf("\n**%s**\n\n", SSP_ETIKET[[s]]))
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "sensitivity", "ctmc_mc", "sensitivity_tornado.csv"),
+    baslik = sprintf("%s — tornado duyarlılık sıralaması", SSP_ETIKET[[s]])
+  )
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "sensitivity", "ctmc_mc", "sensitivity_summary.csv"),
+    baslik = sprintf("%s — Monte Carlo duyarlılık özeti", SSP_ETIKET[[s]])
+  )
+}
+```
+
+---
+
+# Model doğrulaması
+
+## Monte Carlo ve analitik yaklaşımın karşılaştırması
+
+```{r mc-validation, results='asis'}
+for (s in names(SSP_DIRS)) {
+  cat(sprintf("\n### %s {-}\n\n", SSP_ETIKET[[s]]))
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "diagnostics", "mc_validation", "mc_validation_summary.csv"),
+    baslik = sprintf("%s — MC vs analitik özet", SSP_ETIKET[[s]])
+  )
+}
+```
+
+```{r fig-validation-all}
+sekil(file.path(DIR_CROSS, "validation_all_ssp.png"))
+```
+
+**Yorum notu:** mutlak yakınsama iyi olsa da, $P_{est}$ değerinin sıfıra çok
+yakın olduğu rejimlerde göreli farklar büyüyebilir. Bu bölümdeki sayıları
+yorumlarken mutlak fark ile göreli farkı ayrı değerlendir.
+
+## İki aşamalı doğrulama ve Jensen eşitsizliği
+
+```{r jensen, results='asis'}
+for (s in names(SSP_DIRS)) {
+  cat(sprintf("\n### %s {-}\n\n", SSP_ETIKET[[s]]))
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "validation", "validation_stage1_summary.csv"),
+    baslik = sprintf("%s — Aşama 1 özeti", SSP_ETIKET[[s]])
+  )
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "validation", "validation_stage2_jensen.csv"),
+    baslik = sprintf("%s — Aşama 2: Jensen eşitsizliği", SSP_ETIKET[[s]])
+  )
+}
+```
+
+```{r fig-convexity}
+sekil(file.path(DIR_OUT, "convexity_EIP_curve.png"))
+```
+
+```{r fig-convexity-map}
+sekil(file.path(DIR_OUT, "convexity_EIP_map.png"))
+```
+
+## Taylor açılımı doğrulaması
+
+```{r fig-taylor}
+sekil(file.path(DIR_CROSS, "fig_taylor_validation.png"))
+```
+
+```{r fig-taylor-kartal}
+sekil(file.path(DIR_CROSS, "fig_kartal_taylor_profile.png"))
+```
+
+## Poisson-Bernoulli tutarlılığı
+
+```{r poisson-bernoulli}
+tablo(file.path(DIR_TBL, "tbl_ek_a4_poisson_bernoulli.csv"),
+      baslik = "Poisson ve Bernoulli formülasyonlarının karşılaştırması")
+```
+
+```{r fig-poisson}
+sekil(file.path(DIR_CROSS, "fig_A1_poisson_validation.png"))
+```
+
+---
+
+# İstatistiksel modelleme
+
+## Doğrusal karma modeller (LMM)
+
+```{r lmm}
+tablo(file.path(DIR_TBL, "lmm_fixed_effects.csv"), baslik = "LMM sabit etkiler")
+tablo(file.path(DIR_TBL, "lmm_r2_nakagawa.csv"),   baslik = "Nakagawa R-kare")
+tablo(file.path(DIR_TBL, "lmm_fit_metrics.csv"),   baslik = "Model uyum ölçütleri")
+tablo(file.path(DIR_TBL, "lmm_ri_secondary.csv"),  baslik = "Rastgele kesişim (ikincil model)")
+```
+
+## OLS ve hiyerarşik karşılaştırma
+
+```{r ols}
+tablo(file.path(DIR_TBL, "ols_coefficients.csv"),   baslik = "OLS katsayıları")
+tablo(file.path(DIR_TBL, "ols_hierarchical.csv"),   baslik = "Hiyerarşik OLS")
+tablo(file.path(DIR_TBL, "ols_lmm_comparison.csv"), baslik = "OLS ve LMM karşılaştırması")
+tablo(file.path(DIR_TBL, "ols_active_diagnostic.csv"),
+      baslik = "Aktif ilçe-ay altkümesi tanılaması")
+```
+
+## Tobit (sansürlü) model
+
+```{r tobit}
+tablo(file.path(DIR_TBL, "tobit_fe_coefficients.csv"),
+      baslik = "Tobit sabit etkiler katsayıları")
+```
+
+---
+
+# Ek analizler
+
+## Optimum sıcaklık ($T_{opt}$)
+
+```{r topt}
+tablo(file.path(DIR_TBL, "topt_mechanistic.csv"),  baslik = "Mekanistik T_opt")
+tablo(file.path(DIR_TBL, "topt_comparison.csv"),   baslik = "T_opt karşılaştırması")
+tablo(file.path(DIR_TBL, "cross_ssp_topt.csv"),    baslik = "Senaryolar arası T_opt")
+```
+
+## KVPD duyarlılığı
+
+```{r kvpd}
+tablo(file.path(DIR_TBL, "tbl_kvpd_sensitivity.csv"),     baslik = "KVPD duyarlılık")
+tablo(file.path(DIR_TBL, "tbl_kvpd_reference_check.csv"), baslik = "KVPD referans kontrolü")
+```
+
+## EIP log-standart sapması
+
+```{r eip-sdlog}
+tablo(file.path(DIR_OUT, "ssp245", "tables", "tbl_eip_sdlog_district_month.csv"),
+      baslik = "İlçe-ay bazında EIP sdlog", n_max = 30)
+```
+
+## Mekansal otokorelasyon (Moran's I)
+
+```{r moran, results='asis'}
+for (s in names(SSP_DIRS)) {
+  cat(sprintf("\n**%s**\n\n", SSP_ETIKET[[s]]))
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "tables", "tbl_moran.csv"),
+    baslik = sprintf("%s — Moran's I", SSP_ETIKET[[s]])
+  )
+}
+```
+
+## $R_0$ dağılımı
+
+```{r fig-r0}
+sekil(file.path(DIR_CROSS, "fig_R0_dagilim.png"))
+```
+
+---
+
+# Yeniden üretilebilirlik
+
+```{r oturum}
+si <- sessionInfo()
+cat("R sürümü:", si$R.version$version.string, "\n")
+cat("Platform :", si$platform, "\n")
+cat("Locale   :", Sys.getlocale("LC_CTYPE"), "\n")
+cat("Rapor üretim zamanı:", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n\n")
+
+paketler <- c("dplyr", "tidyr", "knitr", "kableExtra", "rmarkdown")
+pv <- data.frame(
+  Paket  = paketler,
+  Sürüm  = sapply(paketler, function(p) {
+    tryCatch(as.character(utils::packageVersion(p)), error = function(e) "yüklü değil")
+  }),
+  row.names = NULL
+)
+kable(pv, format = "html") |>
+  kable_styling(bootstrap_options = c("striped", "condensed"), full_width = FALSE)
+```
+
+```{r git-durumu, results='asis'}
+gitsha <- try(system("git rev-parse --short HEAD", intern = TRUE), silent = TRUE)
+if (!inherits(gitsha, "try-error") && length(gitsha) > 0) {
+  cat(sprintf("\nGit commit: `%s`\n", gitsha[1]))
+}
+```

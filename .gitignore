@@ -1,0 +1,92 @@
+# =============================================================================
+# .gitignore — dengue_ctmc_spark_turkiye
+# =============================================================================
+
+# ── R session / history ──────────────────────────────────────────────────────
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+.RDataTmp
+.RDataTmp*
+*.RData.bak
+
+# ── renv: keep renv.lock and the activate script, ignore the local library ────
+renv/library/
+renv/local/
+renv/cellar/
+renv/staging/
+renv/python/
+renv/sandbox/
+
+# ── Raw climate data — NOT redistributed (size + licensing) ───────────────────
+# Retrieve via the Copernicus CDS queries documented in data_raw/README_data.md
+# (S1 Data: raw CMIP6 and ERA5-Land NetCDF are not redistributed)
+*.nc
+*.nc4
+*.grib
+*.grb
+
+# ── knitr / R Markdown render caches ──────────────────────────────────────────
+*_files/
+*_cache/
+**/figure-html/
+**/figure-latex/
+
+# ── Ad-hoc "new folder" and backup directories — do not track ─────────────────
+Yeni klasör/
+**/Yeni klasör/
+eski_v3_yedek/
+**/eski_v3_yedek/
+
+# ── Optional: rep1 single-draw sweep outputs (keep the rep1000 outputs) ───────
+# Uncomment to slim the repository; rep1000 files are the reproducible ones.
+# outputs/**/*_rep1.csv
+# outputs/**/*_rep1.rds
+
+# ── OS / editor junk ──────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*~
+*.swp
+desktop.ini
+bulgular.html
+desktop.ini
+/*.docx
+/*.jpg
+/convexity_*.png
+/kavramsal_cerceve_*
+/stokastik_gecis_*
+/stochastic_concept.png
+/fig_prcc_pm1.png
+/diagram_*.svg
+/diagram_*.html
+/r_project_tez_*.png
+/r_project_tez_*.svg
+/pipeline_diagram.R
+
+# --- temiz surumde eklendi ---
+Yeni_klasor/
+**/Yeni_klasor/
+_to_delete/
+reports/_rendered/
+*.html
+!README*.html
+
+# --- github minimal reproducibility repo (2026-08) ---
+# Canli/tekrarli calisma kopyalari; outputs/_canonical dondurulmus surumdur
+/outputs/ssp126/
+/outputs/ssp245/
+/outputs/ssp585/
+/outputs/_frozen_unmatched/
+/outputs/_audit/
+
+# Pipeline ara-onbellek / calistirma loglari - yeniden uretilir
+/data_interim/
+/logs/
+
+# Henuz yayina hazir olmayan tez/makale taslaklari
+/manuscript/
+
+# Bu depoya ozel gecici temizlik klasoru
+/_to_delete/

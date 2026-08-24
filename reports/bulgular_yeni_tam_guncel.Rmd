@@ -1,0 +1,913 @@
+---
+title: "Türkiye'de Dengue Yerleşme Riski: CTMC Spark Modeli Bulguları"
+subtitle: "CMIP6 SSP1-2.6 / SSP2-4.5 / SSP5-8.5 senaryoları altında beş sentinel ilçe (2025-2075)"
+author: "Okan Derin"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    number_sections: true
+    df_print: kable
+    fig_width: 9
+    fig_height: 5.5
+    code_folding: hide
+lang: tr
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo    = FALSE,
+  message = FALSE,
+  warning = FALSE,
+  fig.align = "center",
+  dpi     = 150
+)
+
+Sys.setlocale("LC_ALL", "tr_TR.UTF-8")
+options(encoding = "UTF-8", scipen = 999)
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(tidyr)
+  library(purrr)
+  library(readr)
+  library(ggplot2)
+  library(scales)
+  library(knitr)
+  library(kableExtra)
+})
+
+# ---- Yollar --------------------------------------------------------------
+DIR_OUT   <- file.path("outputs", "_canonical")
+DIR_CROSS <- file.path(DIR_OUT, "cross_scenario")
+DIR_TBL   <- file.path(DIR_OUT, "tables")
+
+SSP_DIRS <- c(ssp126 = "ssp126", ssp245 = "ssp245", ssp585 = "ssp585")
+SSP_ETIKET <- c(ssp126 = "SSP1-2.6", ssp245 = "SSP2-4.5", ssp585 = "SSP5-8.5")
+SSP_LIST <- names(SSP_DIRS)
+COL_SSP <- c(
+  ssp126 = "#2A9D8F",
+  ssp245 = "#E9C46A",
+  ssp585 = "#E63946"
+)
+
+# Kimlik-etiket eşlemesi, R/04_results/00_results_setup.R ile bire bir aynıdır.
+DISTRICT_LABELS <- c(
+  "TUR.10.4_1"  = "Hopa (Artvin)",
+  "TUR.39.3_1"  = "Eğirdir (Isparta)",
+  "TUR.40.25_1" = "Kartal (İstanbul)",
+  "TUR.59.4_1"  = "Fethiye (Muğla)",
+  "TUR.81.6_1"  = "Zonguldak"
+)
+
+# Tablo 6.4.2'de kullanılan sunum sırası.
+DISTRICT_DISPLAY_ORDER <- c(
+  "Eğirdir (Isparta)", "Fethiye (Muğla)", "Hopa (Artvin)",
+  "Kartal (İstanbul)", "Zonguldak"
+)
+
+AY_TR_KISA <- c(
+  "Oca", "Şub", "Mar", "Nis", "May", "Haz",
+  "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"
+)
+
+theme_thesis <- function(base_size = 11) {
+  theme_minimal(base_size = base_size) +
+    theme(
+      panel.grid.minor = element_blank(),
+      strip.text = element_text(face = "bold"),
+      plot.title = element_text(face = "bold"),
+      legend.position = "bottom"
+    )
+}
+
+# ---- Savunmacı okuma yardımcıları ---------------------------------------
+# Amaç: bir analiz betiği çalışmamışsa rapor sessizce ESKİ veriyi göstermek
+# yerine görünür bir uyarı bassın. "Hangi adım çalışmadı" sorusu burada
+# yanıtlanır.
+
+.eksik_mesaj <- function(yol) {
+  sprintf(
+    "\n> **Dosya bulunamadı:** `%s` — ilgili analiz betiği çalıştırılmamış olabilir.\n\n",
+    yol
+  )
+}
+
+# results='asis' olan chunk'lar için (tablo() içinden çağrılır)
+.eksik_not <- function(yol) {
+  cat(.eksik_mesaj(yol))
+  invisible(NULL)
+}
+
+# results='asis' OLMAYAN chunk'lar için (sekil() içinden çağrılır).
+# asis_output(), normal chunk'ta otomatik basıldığında ham markdown olarak
+# yorumlanır; cat() burada "##" önekiyle çıkardı.
+.eksik_not_normal <- function(yol) {
+  knitr::asis_output(.eksik_mesaj(yol))
+}
+
+oku <- function(yol) {
+  if (!file.exists(yol)) return(NULL)
+  uzanti <- tolower(tools::file_ext(yol))
+  out <- try({
+    if (uzanti == "rds") {
+      readRDS(yol)
+    } else if (uzanti == "csv") {
+      read.csv(yol, fileEncoding = "UTF-8", check.names = FALSE)
+    } else {
+      NULL
+    }
+  }, silent = TRUE)
+  if (inherits(out, "try-error")) return(NULL)
+  out
+}
+
+# ÖNEMLİ: kable/kableExtra nesnesini print() ile basmak HTML'i KONSOL ÇIKTISI
+# olarak üretir; knitr da onu "##" önekiyle kod bloğuna gömer (bozuk görünüm).
+# Doğrusu: HTML'i cat() ile ham metin olarak yaymak ve chunk'ı results='asis'
+# ile çalıştırmak. Bu yardımcıyı çağıran TÜM chunk'larda results='asis' olmalı.
+
+# ---- Olasılık sütunu biçimlendirici -----------------------------------------
+# P_ufuk ve P_est değerleri 1e-11 ile 1 arasında değişiyor. kable(digits=3)
+# ile Fethiye, Zonguldak ve Eğirdir "0.000" görünüyordu. Bu yardımcı, 0-1
+# aralığında olup küçük değer içeren sütunları büyüklüğe göre biçimlendirir.
+# n, yüzde ve korelasyon sütunları etkilenmez (ya >1 ya da küçük değer yok).
+bicimle_olasilik <- function(d, sutunlar = NULL, esik = 1e-3) {
+  if (is.null(sutunlar)) {
+    sutunlar <- names(d)[vapply(d, function(x) {
+      is.numeric(x) && all(x >= 0 & x <= 1, na.rm = TRUE) &&
+        any(x > 0 & x < esik, na.rm = TRUE)
+    }, logical(1))]
+  }
+  sutunlar <- intersect(sutunlar, names(d))
+  for (cn in sutunlar) {
+    x <- suppressWarnings(as.numeric(d[[cn]]))
+    d[[cn]] <- ifelse(
+      is.na(x), "-",
+      ifelse(x >= 0.9999, ">99,99%",
+      ifelse(x >= 0.01, sub("\\.", ",", sprintf("%.2f%%", 100 * x)),
+      ifelse(x >= 1e-4, sub("\\.", ",", sprintf("%.4f%%", 100 * x)),
+      ifelse(x <= 0, "~0", formatC(x, format = "e", digits = 2))))))
+  }
+  d
+}
+
+bicimle_p <- function(d, esik = 0.001) {
+
+  p_adlari <- c(
+    "p_value", "p.value",
+    "p-değeri", "p_değeri", "p-degeri",
+    "p_LRT", "ANOVA_p"
+  )
+
+  # Yalnızca açıkça tanımlanan p-değeri sütunları
+  p_sutunlari <- names(d)[
+    tolower(trimws(names(d))) %in% tolower(p_adlari)
+  ]
+
+  for (cn in p_sutunlari) {
+
+    gorunen <- as.character(d[[cn]])
+
+    sayisal <- suppressWarnings(
+      as.numeric(gsub(",", ".", gorunen, fixed = TRUE))
+    )
+
+    kucuk <- !is.na(sayisal) & sayisal < esik
+    mevcut_esik <- grepl("^\\s*<", gorunen)
+
+    gorunen[kucuk | mevcut_esik] <- "<0,001"
+    d[[cn]] <- gorunen
+  }
+
+  d
+}
+
+tablo <- function(yol, baslik = NULL, digits = 3, n_max = NULL,
+                  bicim_olasilik = FALSE, bicim_sutunlar = NULL) {
+  d <- oku(yol)
+  if (is.null(d)) return(.eksik_not(yol))
+  if (!is.null(n_max) && nrow(d) > n_max) d <- head(d, n_max)
+  if (isTRUE(bicim_olasilik)) d <- bicimle_olasilik(d, bicim_sutunlar)
+  d <- bicimle_p(d)
+
+  k <- kable(d, digits = digits, caption = baslik, format = "html",
+             row.names = FALSE)
+  k <- kable_styling(k, bootstrap_options = c("striped", "condensed"),
+                     full_width = FALSE, position = "center")
+
+  cat("\n\n", as.character(k), "\n\n", sep = "")
+  invisible(d)
+}
+
+# Aynı sorun tek seferlik kable çağrıları için de geçerli; onlarda da bunu kullan.
+tablo_df <- function(d, baslik = NULL, digits = 3) {
+  k <- kable(d, digits = digits, caption = baslik, format = "html",
+             row.names = FALSE)
+  k <- kable_styling(k, bootstrap_options = c("striped", "condensed"),
+                     full_width = FALSE, position = "center")
+  cat("\n\n", as.character(k), "\n\n", sep = "")
+  invisible(d)
+}
+
+sekil <- function(yol, altyazi = NULL) {
+  if (!file.exists(yol)) return(.eksik_not_normal(yol))
+  knitr::include_graphics(yol)
+}
+
+# Dosya tazelik bilgisi: çıktı ne zaman üretilmiş?
+tazelik <- function(yollar) {
+  data.frame(
+    Dosya      = yollar,
+    Mevcut     = ifelse(file.exists(yollar), "evet", "HAYIR"),
+    `Son değişiklik` = ifelse(
+      file.exists(yollar),
+      format(file.mtime(yollar), "%Y-%m-%d %H:%M"),
+      "-"
+    ),
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
+}
+```
+
+# Kapsam ve okuma notu
+
+Bu rapor, `outputs/_canonical/` altındaki ana model çıktıları ile
+`R/04_results/` betiklerinin ürettiği ikincil tablo ve şekilleri sunar. Veri
+kurulumu (`R/02_data/`) ve model koşumu (`R/03_models/`) daha önce tamamlanmış
+kabul edilir; rapor bu adımları yeniden çalıştırmaz.
+
+Bir bölümde tablo veya şekil yerine **"Dosya bulunamadı"** uyarısı görürsen, o
+bölümü üreten betik henüz çalıştırılmamış demektir. Aşağıdaki envanter tablosu
+hangi çıktının ne zaman üretildiğini gösterir; bu, eski sonuçların rapora
+sızmasını önlemek için konuldu.
+
+## Çıktı envanteri ve tazelik kontrolü
+
+```{r envanter, results='asis'}
+kritik_dosyalar <- c(
+  file.path(DIR_OUT, SSP_DIRS, "analytic", "ctmc_spark_horizon_2025_2075.rds"),
+  file.path(DIR_OUT, SSP_DIRS, "simulation",    "ctmc_spark_horizon_2025_2075_rep1000.rds"),
+  file.path(DIR_OUT, SSP_DIRS, "tables",        "tbl_horizon.csv"),
+  file.path(DIR_OUT, SSP_DIRS, "tables",        "tbl_prcc.csv"),
+  file.path(DIR_OUT, SSP_DIRS, "validation",    "validation_stage1_summary.csv"),
+  file.path(DIR_OUT, SSP_DIRS, "oat", "sensitivity_summary.csv")
+  )
+
+env <- tazelik(kritik_dosyalar)
+tablo_df(env, baslik = "Kritik cikti dosyalarinin durumu")
+
+```
+
+```{r envanter-uyari, results='asis'}
+eksik <- env$Dosya[env$Mevcut == "HAYIR"]
+if (length(eksik) > 0) {
+  cat("\n**Uyarı:** aşağıdaki kritik çıktılar eksik:\n\n")
+  cat(paste0("- `", eksik, "`\n"), sep = "")
+} else {
+  cat("\nTüm kritik çıktılar mevcut.\n")
+}
+```
+
+***
+
+# Ana bulgu: ufuk boyu yerleşme olasılığı ($P_{ufuk}$)
+
+2025-2075 projeksiyon ufkunda (başlangıç ve bitiş yılları dâhil **51 takvim
+yılı**, 612 ay) her sentinel ilçe için kümülatif yerleşme olasılığı. Senaryo
+başına ayrı tablolar verilmiştir.
+
+`p_lo` ve `p_hi` sütunları dış Monte Carlo tekrarlarının %2,5 ve %97,5
+persentilleridir; bunlar **%95 Monte Carlo örnekleme aralığı**dır, parametrik
+güven aralığı veya model belirsizliği aralığı değildir.
+
+**Operasyonel tanım.** Bu çalışmada $P_{ufuk}$, en az bir ithal enfeksiyon
+kıvılcımının modelde tanımlanan $I = 30$ operasyonel eşiğine ulaşma
+olasılığıdır. Endemik kalıcılık olasılığı, yıllık risk veya kalibre edilmiş
+koşulsuz bir Türkiye tahmini **değildir**. Sonuçlar $m = 1{,}0$ referans
+senaryosuna koşulludur.
+
+```{r horizon-tablolar, results='asis'}
+for (s in names(SSP_DIRS)) {
+  cat(sprintf("\n## %s {-}\n\n", SSP_ETIKET[[s]]))
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "tables", "tbl_horizon.csv"),
+    baslik = sprintf("%s — ilçe bazında P_ufuk (2025-2075, 51 yıl)", SSP_ETIKET[[s]]),
+    bicim_olasilik = TRUE
+  )
+}
+```
+# Aylık otokton yerleşme olasılığı ($P_{est}$)
+
+Bu bölümdeki tablo ve şekiller, eski rapordaki sabit değerlerden değil, her
+SSP için `outputs/_canonical/<ssp>/simulation/` altında bulunan kanonik
+`ctmc_spark_monthly_2025_2075_rep1000.csv` dosyasından üretilir. **Aktif ay**,
+$P_{est}>0$ olan ilçe-ay-yıl hücrelerinin sayısıdır; her ilçe ve senaryoda
+tam projeksiyon 612 ayı (51 yıl × 12 ay) kapsar.
+
+```{r pest-kanonik-yukle, include=FALSE}
+kanonik_aylik_oku <- function(ssp) {
+  # dplyr veri maskesinde sonradan oluşturulan `ssp` sütunuyla karışmaması için
+  # fonksiyon argümanını transmute() öncesinde tek değerli sabitlere bağla.
+  ssp_kodu <- as.character(ssp)[1]
+  ssp_etiketi <- unname(SSP_ETIKET[[ssp_kodu]])
+
+  yol_csv <- file.path(
+    DIR_OUT, SSP_DIRS[[ssp_kodu]], "simulation",
+    "ctmc_spark_monthly_2025_2075_rep1000.csv"
+  )
+  yol_rds <- sub("\\.csv$", ".rds", yol_csv)
+
+  if (file.exists(yol_csv)) {
+    d <- readr::read_csv(yol_csv, show_col_types = FALSE, progress = FALSE)
+  } else if (file.exists(yol_rds)) {
+    d <- readRDS(yol_rds)
+  } else {
+    stop("Kanonik aylık çıktı bulunamadı: ", yol_csv, call. = FALSE)
+  }
+
+  gerekli <- c("district_id", "year", "month", "p_establishment_mean")
+  eksik <- setdiff(gerekli, names(d))
+  if (length(eksik) > 0) {
+    stop(
+      sprintf("%s dosyasında gerekli sütunlar eksik: %s",
+              basename(yol_csv), paste(eksik, collapse = ", ")),
+      call. = FALSE
+    )
+  }
+
+  d %>%
+    transmute(
+      ssp = ssp_kodu,
+      Senaryo = ssp_etiketi,
+      district_id = as.character(district_id),
+      İlçe = unname(DISTRICT_LABELS[as.character(district_id)]),
+      year = as.integer(year),
+      month = as.integer(month),
+      P_est = as.numeric(p_establishment_mean)
+    ) %>%
+    mutate(
+      Senaryo = factor(Senaryo, levels = unname(SSP_ETIKET)),
+      İlçe = factor(İlçe, levels = DISTRICT_DISPLAY_ORDER),
+      Ay = factor(AY_TR_KISA[month], levels = AY_TR_KISA)
+    )
+}
+
+pest_aylik <- purrr::map_dfr(SSP_LIST, kanonik_aylik_oku)
+
+# Yinelenen hücre ve 51 × 12 kapsamı knit sırasında zorunlu olarak denetlenir.
+pest_yineleme <- pest_aylik %>%
+  count(ssp, district_id, year, month, name = "n") %>%
+  filter(n != 1)
+if (nrow(pest_yineleme) > 0) {
+  stop("Kanonik aylık çıktıda yinelenen ilçe-yıl-ay hücresi bulundu.", call. = FALSE)
+}
+
+pest_kapsam <- pest_aylik %>%
+  count(ssp, district_id, name = "n_months")
+if (any(pest_kapsam$n_months != 612L)) {
+  stop("Her ilçe × SSP için tam olarak 612 aylık hücre bekleniyor.", call. = FALSE)
+}
+```
+
+## $P_{est}$ dağılımının ilçe ve senaryolara göre özeti
+
+```{r tbl-pest-summary-canonical, results='asis'}
+pest_active <- pest_aylik %>%
+  filter(is.finite(P_est), P_est > 0)
+
+# Her yılın en yüksek P_est ayı; sonra 51 yıl içinde en sık görülen ay.
+pest_peak <- pest_active %>%
+  arrange(ssp, district_id, year, desc(P_est), month) %>%
+  group_by(ssp, district_id, year) %>%
+  slice(1) %>%
+  ungroup() %>%
+  count(ssp, Senaryo, district_id, İlçe, month, name = "n_peak") %>%
+  arrange(ssp, district_id, desc(n_peak), month) %>%
+  group_by(ssp, district_id) %>%
+  slice(1) %>%
+  ungroup() %>%
+  transmute(ssp, district_id, `Pik ay` = AY_TR_KISA[month])
+
+pest_summary <- pest_active %>%
+  group_by(ssp, Senaryo, district_id, İlçe) %>%
+  summarise(
+    `Aktif ay` = n(),
+    `Medyan P_est` = median(P_est, na.rm = TRUE),
+    `P95 P_est` = quantile(P_est, 0.95, na.rm = TRUE, names = FALSE),
+    `Maks P_est` = max(P_est, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  left_join(pest_peak, by = c("ssp", "district_id")) %>%
+  arrange(Senaryo, İlçe) %>%
+  transmute(
+    Senaryo = as.character(Senaryo),
+    İlçe = as.character(İlçe),
+    `Aktif ay`,
+    `Medyan P_est` = chartr(".", ",", formatC(`Medyan P_est`, format = "e", digits = 2)),
+    `P95 P_est` = chartr(".", ",", formatC(`P95 P_est`, format = "e", digits = 2)),
+    `Maks P_est` = chartr(".", ",", formatC(`Maks P_est`, format = "e", digits = 2)),
+    `Pik ay`
+  )
+
+k_pest <- knitr::kable(
+  pest_summary, format = "html", row.names = FALSE,
+  caption = "P_est dağılımının ilçe ve senaryolara göre özeti",
+  escape = TRUE
+) %>%
+  kableExtra::kable_styling(
+    bootstrap_options = c("striped", "condensed"),
+    full_width = FALSE, position = "center"
+  ) %>%
+  kableExtra::column_spec(1, bold = TRUE) %>%
+  kableExtra::collapse_rows(columns = 1, valign = "middle")
+cat("\n\n", as.character(k_pest), "\n\n", sep = "")
+```
+
+## Aylık $P_{est}$ örüntüsü
+
+```{r fig-pest-heat-canonical, fig.cap="Aylık ortalama P_est — ilçe, ay ve SSP senaryosuna göre.", fig.height=9, fig.width=9}
+pest_heat <- pest_active %>%
+  group_by(Senaryo, İlçe, Ay) %>%
+  summarise(P_est = mean(P_est, na.rm = TRUE), .groups = "drop")
+
+ggplot(pest_heat, aes(x = Ay, y = İlçe, fill = P_est)) +
+  geom_tile(colour = "white", linewidth = 0.2) +
+  scale_fill_viridis_c(
+    option = "magma", trans = "log10",
+    labels = scales::label_scientific(), name = expression(P[est])
+  ) +
+  facet_wrap(~Senaryo, ncol = 1) +
+  labs(x = NULL, y = NULL) +
+  theme_thesis() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
+```
+
+```{r fig-pest-trend-canonical, fig.cap="Yıllık ortalama aktif-ay P_est trendi — ilçe bazında üç SSP senaryosu.", fig.height=7, fig.width=10}
+pest_yillik <- pest_active %>%
+  group_by(Senaryo, İlçe, year) %>%
+  summarise(P_est = mean(P_est, na.rm = TRUE), .groups = "drop")
+
+ggplot(pest_yillik, aes(x = year, y = P_est, colour = Senaryo)) +
+  geom_line(linewidth = 0.45, alpha = 0.65) +
+  geom_smooth(method = "loess", se = FALSE, linewidth = 0.9) +
+  scale_y_log10(labels = scales::label_scientific()) +
+  scale_colour_manual(
+    values = setNames(COL_SSP, unname(SSP_ETIKET)), name = "Senaryo"
+  ) +
+  facet_wrap(~İlçe, ncol = 3, scales = "free_y") +
+  labs(x = "Yıl", y = expression(bar(P)[est]~"(aktif ay ort., log)")) +
+  theme_thesis()
+```
+
+***
+## Senaryolar arası karşılaştırma
+
+```{r fig-yearly-cross}
+sekil(file.path(DIR_CROSS, "fig_yearly_risk_comparison.png"))
+```
+
+```{r fig-decade-cross}
+sekil(file.path(DIR_CROSS, "fig_decade_progression_3ssp.png"))
+```
+
+```{r fig-forest}
+sekil(file.path(DIR_CROSS, "fig_forest.png"))
+```
+
+***
+
+# Yıllık ve on yıllık risk gidişatı
+
+```{r decade-tablolar, results='asis'}
+for (s in names(SSP_DIRS)) {
+  cat(sprintf("\n## %s {-}\n\n", SSP_ETIKET[[s]]))
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "tables", "tbl_decade.csv"),
+    baslik = sprintf("%s — on yıllık dilimlerde risk", SSP_ETIKET[[s]]),
+    bicim_olasilik = TRUE
+  )
+}
+```
+
+
+
+
+```{r fig-yearly-per-ssp, results='asis'}
+for (s in names(SSP_DIRS)) {
+  y <- file.path(DIR_OUT, SSP_DIRS[[s]], "figures", "fig_yearly_risk.png")
+  if (file.exists(y)) {
+    cat(sprintf("\n**%s**\n\n", SSP_ETIKET[[s]]))
+    cat(sprintf("![](%s)\n\n", y))
+  }
+}
+```
+
+***
+
+# Mevsimsellik ve iklim uygunluk indeksi (CSI)
+
+```{r sezon-tablolar, results='asis'}
+for (s in names(SSP_DIRS)) {
+  cat(sprintf("\n## %s {-}\n\n", SSP_ETIKET[[s]]))
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "tables", "tbl_season.csv"),
+    baslik = sprintf("%s — aylık mevsimsel profil", SSP_ETIKET[[s]])
+  )
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "tables", "tbl_csi_monthly.csv"),
+    baslik = sprintf("%s — aylık CSI", SSP_ETIKET[[s]])
+  )
+}
+```
+
+## Senaryolar arası mevsimsellik
+
+```{r fig-pest-season}
+sekil(file.path(DIR_CROSS, "fig_pest_season_cross.png"))
+```
+
+```{r fig-csi-heat}
+sekil(file.path(DIR_CROSS, "combined_plot_csi_heat_vertical_tr.png"))
+```
+
+```{r fig-temp-rh}
+sekil(file.path(DIR_CROSS, "combined_plot_temp_rh_profile_vertical.png"))
+```
+
+## Yağış katkılı CSI (3 vs 4 bileşen)
+
+```{r csi-rainfall, results='asis'}
+for (s in names(SSP_DIRS)) {
+  cat(sprintf("\n**%s**\n\n", SSP_ETIKET[[s]]))
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "rainfall_CSI", "CSI_comparison_3vs4.csv"),
+    baslik = sprintf("%s — CSI 3 bileşen vs 4 bileşen (yağış dahil)", SSP_ETIKET[[s]])
+  )
+}
+```
+
+***
+
+# İthalat baskısı (importation pressure)
+
+```{r import-tablolar, results='asis'}
+for (s in names(SSP_DIRS)) {
+  cat(sprintf("\n## %s {-}\n\n", SSP_ETIKET[[s]]))
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "tables", "tbl_import_summary.csv"),
+    baslik = sprintf("%s — ithalat baskısı özeti", SSP_ETIKET[[s]])
+  )
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "tables", "tbl_country_contrib.csv"),
+    baslik = sprintf("%s — kaynak ülke katkıları", SSP_ETIKET[[s]]),
+    n_max = 20
+  )
+}
+```
+
+```{r fig-country}
+sekil(file.path(DIR_OUT, "ssp245", "figures", "fig_country_contrib.png"))
+```
+
+## İthalat duyarlılığı (eta ve k parametreleri)
+
+```{r import-sens, results='asis'}
+for (s in names(SSP_DIRS)) {
+  yol <- file.path(DIR_OUT, SSP_DIRS[[s]], "importation",
+                   sprintf("sensitivity_summary_%s.csv", SSP_DIRS[[s]]))
+  cat(sprintf("\n**%s**\n\n", SSP_ETIKET[[s]]))
+  tablo(yol, baslik = sprintf("%s — ithalat parametre duyarlılığı", SSP_ETIKET[[s]]))
+}
+```
+
+***
+
+# Duyarlılık analizleri
+
+## PRCC (Latin hiperküp örneklemesi)
+
+```{r prcc-tablolar, results='asis'}
+for (s in names(SSP_DIRS)) {
+  cat(sprintf("\n### %s {-}\n\n", SSP_ETIKET[[s]]))
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "tables", "tbl_prcc.csv"),
+    baslik = sprintf("%s — PRCC katsayıları", SSP_ETIKET[[s]])
+  )
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "tables", "tbl_prcc_param_ranges.csv"),
+    baslik = sprintf("%s — PRCC parametre aralıkları", SSP_ETIKET[[s]])
+  )
+}
+```
+
+```{r fig-prcc-combined}
+sekil(file.path(DIR_CROSS, "combined_fig_prcc.png"))
+```
+
+
+
+## OAT (tek parametre değiştirme)
+
+Beş $m$ senaryosu ile $\beta_{vh}$ ve bulaşıcılık süresinde (IP) $\pm\%20$
+pertürbasyon, tam Monte Carlo ile (n_rep = 1.000) hesaplanmıştır. Her senaryoda
+yalnızca ilgili parametre değiştirilmiş, diğerleri baz değerlerinde sabit
+tutulmuştur.
+
+**Doğrusallık uyarısı.** Yerel bulaş hızı $\lambda_{local}(i=1)$; $m$,
+$\beta_{vh}$ ve IP parametrelerinin her birinde doğrusaldır. Bu nedenle bu üç
+parametreye uygulanan **eşit oranlı** pertürbasyonlar özdeş bir etkin çarpan
+üretir: $m=0{,}80$, $\beta_{vh}-\%20$ ve IP$-\%20$ senaryoları aynı $P_{ufuk}$
+değerini verir. Bu bir model artefaktı değil, doğrusallığın doğrudan sonucudur;
+söz konusu parametreler tek bir **etkin ölçek sınıfı** oluşturur.
+
+```{r oat-tablo, results='asis'}
+tablo(file.path(DIR_TBL, "tbl_oat_all_ssp.csv"),
+      baslik = "OAT duyarlılık analizi: P_ufuk (2025-2075 kümülatif risk)")
+```
+
+**Metrik notu.** Baz $P_{ufuk}$ değerleri ilçeler arasında $10^{-9}$ ile
+$10^{0}$ arasında değiştiğinden, göreli yüzde değişim tabanı sıfıra yakın
+ilçelerde anlamsız büyüklüklere ulaşır (önceki sürümde $+9{\times}10^{6}\%$
+gibi değerler görülüyordu). Değişim bu nedenle **yüzde puan** ($\Delta$pp)
+cinsinden ve ilçe bazında raporlanmıştır.
+
+```{r oat-tornado-pp, results='asis'}
+tablo(file.path(DIR_TBL, "tbl_oat_tornado_pp.csv"),
+      baslik = "Etkin çarpan sınıfı bazında değişim (yüzde puan)",
+      bicim_olasilik = TRUE,
+      bicim_sutunlar = c("P", "P_base"))
+```
+
+```{r fig-oat-tornado-pp}
+sekil(file.path(DIR_CROSS, "fig_oat_tornado_pp.png"))
+```
+
+```{r fig-oat-m-profile}
+sekil(file.path(DIR_CROSS, "fig_oat_m_profile_pp.png"))
+```
+
+
+***
+
+# Yazılım doğrulaması ve tahmin edici karşılaştırması
+
+## Yazılım doğrulaması (σ_EIP = 0)
+
+EIP dağılım genişliği sıfıra sabitlendiğinde analitik çözüm (gambler's ruin)
+ile Monte Carlo tahmini **makine hassasiyeti düzeyinde** örtüşmelidir. Bu, model
+kodlamasının doğruluğunu sınayan bir yazılım doğrulamasıdır; dış geçerlilik
+kanıtı değildir.
+
+```{r dogrulama-asama1, results='asis'}
+for (s in names(SSP_DIRS)) {
+  cat(sprintf("\n### %s {-}\n\n", SSP_ETIKET[[s]]))
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "validation", "validation_stage1_summary.csv"),
+    baslik = sprintf("%s — σ_EIP = 0 altında analitik ≡ Monte Carlo", SSP_ETIKET[[s]])
+  )
+}
+```
+
+## Tahmin edici karşılaştırması (σ_EIP > 0)
+
+$\sigma_{EIP} > 0$ olduğunda yerine-koyma tahmin edicisi
+$P_{est}(\mathbb{E}[\mathrm{EIP}])$ ile beklenen değer tahmin edicisi
+$\mathbb{E}[P_{est}(\mathrm{EIP})]$ aynı sonucu vermemektedir. İncelenen
+ilçe-ay hücrelerinde yerine-koyma tahmin edicisi sistematik olarak daha yüksek
+bulunmuştur. Bu fark, EIP belirsizliğinin doğrusal olmayan $P_{est}$ fonksiyonu
+üzerinden yayılmasının ampirik bir sonucudur; fonksiyonun tüm parametre
+uzayında konkav olduğunu veya farkın yönünün her koşulda değişmeyeceğini
+kanıtlamaz.
+
+**Bu bir doğrulama değil, farklı varsayımlara dayanan iki estimandın
+karşılaştırmasıdır.** Çalışmanın birincil estimandı
+$\mathbb{E}[P_{est}(\mathrm{EIP})]$'dir ve raporlanan $P_{ufuk}$ değerleri buna
+dayanmaktadır. Yerine-koyma yaklaşımı analitik referans olarak verilmiştir. Bu
+iki değer, EIP'in örneklenmesi ve korelasyon yapısına ilişkin farklı
+varsayımları temsil eder; gerçek değeri kuşatan kesin alt ve üst sınırlar
+olarak yorumlanmamalıdır.
+
+```{r dogrulama-asama2, results='asis'}
+for (s in names(SSP_DIRS)) {
+  cat(sprintf("\n### %s {-}\n\n", SSP_ETIKET[[s]]))
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "validation", "validation_stage2_jensen.csv"),
+    baslik = sprintf("%s — tahmin ediciler arası fark", SSP_ETIKET[[s]])
+  )
+}
+```
+
+**Yorum.** Mutlak fark küçüktür (ortalama < 0,003) ancak bu bir yakınsama
+kanıtı **değildir**: $P_{est}$ hücrelerin çoğunda zaten $10^{-4}$'ün altındadır.
+Göreli ölçekte fark medyan olarak yaklaşık **%700–770** (≈7–8 kat) düzeyindedir
+ve aktif hücrelerin yalnızca %1,6–5,6'sı %5 toleransı içinde kalmaktadır. Sapma
+sıcaklıkla birlikte büyümektedir.
+
+## Hücre düzeyi analitik–MC karşılaştırması
+
+Aşağıdaki tablo, ilçe başına 612 ay (51 yıl × 12) üzerinden analitik ve Monte
+Carlo tahminlerini karşılaştırır. `pct_in_ci`, analitik değerin Monte Carlo %95
+örnekleme aralığı içinde bulunduğu hücrelerin oranıdır. Ancak analitik değer
+bir gerçek değer olmadığı ve iki yaklaşım farklı estimandları temsil ettiği
+için bu oran bir güven aralığı kapsama testi **değildir**; dolayısıyla %95
+olması beklenmez. Gözlenen %59–79 oranı, iki tahmin edici arasındaki sistematik
+farkın betimleyici bir göstergesidir. `pct_within_threshold` ise mutlak 0,02
+eşiği nedeniyle küçük $P_{est}$ değerlerinde ayırt edici değildir.
+
+```{r mc-validation, results='asis'}
+for (s in names(SSP_DIRS)) {
+  cat(sprintf("\n### %s {-}\n\n", SSP_ETIKET[[s]]))
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "diagnostics", "mc_validation", "mc_validation_summary.csv"),
+    baslik = sprintf("%s — hücre düzeyi analitik–MC karşılaştırması", SSP_ETIKET[[s]]),
+    bicim_olasilik = TRUE,
+    bicim_sutunlar = c("mean_abs_diff", "max_abs_diff",
+                       "mean_p_est_analytic", "mean_p_est_mc")
+  )
+}
+```
+
+```{r fig-validation-all}
+sekil(file.path(DIR_CROSS, "validation_all_ssp.png"))
+```
+
+```{r fig-convexity}
+sekil(file.path(DIR_OUT, "convexity_EIP_curve.png"))
+```
+
+```{r fig-convexity-map}
+sekil(file.path(DIR_OUT, "convexity_EIP_map.png"))
+```
+
+## Taylor açılımı doğrulaması
+
+```{r fig-taylor}
+sekil(file.path(DIR_CROSS, "fig_taylor_validation.png"))
+```
+
+```{r fig-taylor-kartal}
+sekil(file.path(DIR_CROSS, "fig_kartal_taylor_profile.png"))
+```
+
+## Poisson-Bernoulli tutarlılığı
+
+```{r poisson-bernoulli, results='asis'}
+
+tablo(
+  file.path(DIR_TBL, "tbl_ek_a4_poisson_bernoulli.csv"),
+  baslik = "Poisson ve Bernoulli formülasyonlarının karşılaştırması",
+  bicim_olasilik = TRUE,
+  bicim_sutunlar = c(
+    "maks p_ay",
+    "P_ufuk (kesin)",
+    "P_ufuk (Poisson)"
+  )
+)
+```
+
+```{r fig-poisson}
+sekil(file.path(DIR_CROSS, "fig_A1_poisson_validation.png"))
+```
+
+***
+
+# İstatistiksel modelleme
+
+## Doğrusal karma modeller (LMM)
+
+```{r lmm, results='asis'}
+tablo(file.path(DIR_TBL, "lmm_fixed_effects.csv"), baslik = "LMM sabit etkiler")
+tablo(file.path(DIR_TBL, "lmm_r2_nakagawa.csv"),   baslik = "Nakagawa R-kare")
+tablo(file.path(DIR_TBL, "lmm_fit_metrics.csv"),   baslik = "Model uyum ölçütleri")
+tablo(file.path(DIR_TBL, "lmm_ri_secondary.csv"),  baslik = "Rastgele kesişim (ikincil model)")
+```
+
+## OLS ve hiyerarşik karşılaştırma
+
+```{r ols, results='asis'}
+tablo(file.path(DIR_TBL, "ols_coefficients.csv"),   baslik = "OLS katsayıları")
+tablo(file.path(DIR_TBL, "ols_hierarchical.csv"),   baslik = "Hiyerarşik OLS")
+tablo(file.path(DIR_TBL, "ols_lmm_comparison.csv"), baslik = "OLS ve LMM karşılaştırması")
+tablo(file.path(DIR_TBL, "ols_active_diagnostic.csv"),
+      baslik = "Aktif ilçe-ay altkümesi tanılaması")
+```
+
+## Tobit (sansürlü) model
+
+```{r tobit, results='asis'}
+tablo(file.path(DIR_TBL, "tobit_fe_coefficients.csv"),
+      baslik = "Tobit sabit etkiler katsayıları")
+```
+
+***
+
+# Ek analizler
+
+## Optimum sıcaklık ($T_{opt}$)
+
+```{r topt, results='asis'}
+tablo(file.path(DIR_TBL, "topt_mechanistic.csv"),  baslik = "Mekanistik T_opt")
+tablo(file.path(DIR_TBL, "topt_comparison.csv"),   baslik = "T_opt karşılaştırması")
+tablo(file.path(DIR_TBL, "cross_ssp_topt.csv"),    baslik = "Senaryolar arası T_opt")
+```
+
+## KVPD duyarlılığı
+
+$k_{vpd}$ duyarlılık analizi, ana koşumun sakladığı $P_{est}$ değerlerine
+**çapalanarak** yürütülmüştür: her ilçe-ay hücresi için $k_{vpd}=0{,}3$ ve
+$0{,}8$ değerlerindeki yerleşme olasılığı, yeniden hesaplanan orandan
+($P_{est}(k)/P_{est}(0{,}5)$) türetilip ana koşumun $P_{est}(0{,}5)$ değeriyle
+çarpılmıştır. Bu, baz senaryonun ana bulgularla tam tutarlılığını garanti eder
+(maks $|\log_{10}$ fark$| = 0$).
+
+```{r kvpd, results='asis'}
+tablo(file.path(DIR_TBL, "tbl_kvpd_sensitivity.csv"),
+      baslik = "k_vpd duyarlılığı — P_horizon ve maks P_est",
+      bicim_olasilik = TRUE)
+tablo(file.path(DIR_TBL, "tbl_kvpd_canonical_check.csv"),
+      baslik = "k_vpd = 0,5 ile ana hat karşılaştırması (çapraz kontrol)",
+      bicim_olasilik = TRUE)
+tablo(file.path(DIR_TBL, "tbl_kvpd_hierarchy.csv"),
+      baslik = "k_vpd düzeyine göre ilçe sıralaması",
+      bicim_olasilik = TRUE)
+tablo(file.path(DIR_TBL, "tbl_kvpd_reference_check.csv"),
+      baslik = "Referans koşul (RH = %75): maks P_est ve optimum sıcaklık")
+```
+
+**Hiyerarşi duyarlılığı.** İlçeler arası risk sıralaması $k_{vpd}$'ye
+duyarlıdır. Kartal'ın birinciliği ve Eğirdir'in sonunculuğu tüm düzeylerde
+korunurken, ortadaki üç ilçenin sırası değişmektedir. Örneğin SSP1-2.6 altında
+Fethiye, $k_{vpd}=0{,}3$ düzeyinde ikinci sırada iken
+($8{,}45{\times}10^{-3}$), $k_{vpd}=0{,}8$ düzeyinde dördüncü sıraya
+gerilemektedir ($1{,}40{\times}10^{-6}$) — dört büyüklük mertebesi fark. Hopa ise ters yönde tepki verir: yüksek bağıl nemi (%87)
+nedeniyle VPD'si referans eşiğin (1,0 kPa) altında olduğundan $k_{vpd}$
+büyüdükçe vektör mortalitesi azalır ve riski artar.
+
+
+
+
+## EIP log-standart sapması
+
+```{r eip-sdlog, results='asis'}
+tablo(file.path(DIR_OUT, "ssp245", "tables", "tbl_eip_sdlog_district_month.csv"),
+      baslik = "İlçe-ay bazında EIP sdlog", n_max = 30)
+```
+
+## Mekansal otokorelasyon (Moran's I)
+
+```{r moran, results='asis'}
+for (s in names(SSP_DIRS)) {
+  cat(sprintf("\n**%s**\n\n", SSP_ETIKET[[s]]))
+  tablo(
+    file.path(DIR_OUT, SSP_DIRS[[s]], "tables", "tbl_moran.csv"),
+    baslik = sprintf("%s — Moran's I", SSP_ETIKET[[s]])
+  )
+}
+```
+
+## $R_0$ dağılımı
+
+```{r fig-r0}
+sekil(file.path(DIR_CROSS, "fig_R0_dagilim.png"))
+```
+
+***
+
+# Yeniden üretilebilirlik
+
+```{r oturum, results='asis'}
+si <- sessionInfo()
+
+ortam <- data.frame(
+  Ogd = c("R surumu", "Platform", "Locale (LC_CTYPE)", "Rapor uretim zamani"),
+  Deger = c(si$R.version$version.string,
+            si$platform,
+            Sys.getlocale("LC_CTYPE"),
+            format(Sys.time(), "%Y-%m-%d %H:%M:%S")),
+  stringsAsFactors = FALSE
+)
+names(ortam) <- c("Öğe", "Değer")
+tablo_df(ortam, baslik = "Çalışma ortamı")
+
+paketler <- c("dplyr", "tidyr", "knitr", "kableExtra", "rmarkdown")
+pv <- data.frame(
+  Paket = paketler,
+  Sürüm = sapply(paketler, function(p) {
+    tryCatch(as.character(utils::packageVersion(p)), error = function(e) "yüklü değil")
+  }),
+  stringsAsFactors = FALSE
+)
+tablo_df(pv, baslik = "Paket sürümleri")
+```
+
+```{r git-durumu, results='asis'}
+gitsha <- try(system("git rev-parse --short HEAD", intern = TRUE), silent = TRUE)
+if (!inherits(gitsha, "try-error") && length(gitsha) > 0) {
+  cat(sprintf("\nGit commit: `%s`\n", gitsha[1]))
+}
+```
+

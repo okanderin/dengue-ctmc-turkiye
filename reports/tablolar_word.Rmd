@@ -1,0 +1,271 @@
+---
+title: "Tez Tabloları — Word Çıktısı"
+subtitle: "outputs/_canonical/ ve outputs/tables/ dosyalarından üretilir"
+author: "Okan Derin"
+date: "`r format(Sys.Date(), '%d.%m.%Y')`"
+output:
+  word_document:
+    reference_docx: null      # kendi şablonun varsa yolunu yaz
+    toc: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+
+suppressPackageStartupMessages({
+  library(here); library(dplyr); library(readr); library(flextable); library(officer)
+})
+
+DIR_TBL   <- here("outputs", "_canonical", "tables")   # kanonik tablolar
+DIR_TBL_2 <- here("outputs", "tables")                 # henüz dondurulmamışlar
+
+# ---- Yardımcılar ------------------------------------------------------------
+
+# Dosyayı önce kanonikte, sonra çalışma dizininde arar
+bul <- function(dosya) {
+  for (d in c(DIR_TBL, DIR_TBL_2)) {
+    p <- file.path(d, dosya)
+    if (file.exists(p)) return(p)
+  }
+  NA_character_
+}
+
+oku <- function(dosya) {
+  p <- bul(dosya)
+  if (is.na(p)) return(NULL)
+  read_csv(p, show_col_types = FALSE, locale = locale(encoding = "UTF-8"))
+}
+
+# Olasılık sütunlarını büyüklüğe göre biçimlendir (0.000 sorununu önler)
+bicimle_olasilik <- function(d, sutunlar = NULL, esik = 1e-3) {
+  if (is.null(sutunlar)) {
+    sutunlar <- names(d)[vapply(d, function(x)
+      is.numeric(x) && all(x >= 0 & x <= 1, na.rm = TRUE) &&
+        any(x > 0 & x < esik, na.rm = TRUE), logical(1))]
+  }
+  for (cn in sutunlar) {
+    x <- d[[cn]]
+    d[[cn]] <- ifelse(is.na(x), "-",
+                ifelse(x >= 0.9999, ">99,99%",
+                ifelse(x >= 0.01,   sub("\\.", ",", sprintf("%.2f%%", 100 * x)),
+                ifelse(x >= 1e-4,   sub("\\.", ",", sprintf("%.4f%%", 100 * x)),
+                ifelse(x <= 0,      "~0",
+                                    formatC(x, format = "e", digits = 2))))))
+  }
+  d
+}
+
+# p = 0 gösterimini engelle
+bicimle_p <- function(d, esik = 0.001) {
+  cols <- grep("(^|[._ -])p([._ -]?(value|deger|degeri|değeri|lrt))?$",
+               names(d), ignore.case = TRUE, value = TRUE)
+  for (cn in cols) {
+    g <- as.character(d[[cn]])
+    s <- suppressWarnings(as.numeric(gsub(",", ".", g, fixed = TRUE)))
+    g[!is.na(s) & s < esik] <- "<0,001"
+    d[[cn]] <- g
+  }
+  d
+}
+
+# Ondalık ayracı virgüle çevir (Türkçe akademik yazım)
+virgul <- function(d, basamak = 3) {
+  for (cn in names(d)) {
+    if (is.numeric(d[[cn]]))
+      d[[cn]] <- sub("\\.", ",", formatC(d[[cn]], format = "g", digits = basamak))
+  }
+  d
+}
+
+# ---- Ana tablo fonksiyonu ---------------------------------------------------
+# Word'de düzgün görünen, APA benzeri sade tablo üretir.
+tablo <- function(dosya, baslik, not = NULL,
+                  bicim_olasilik = FALSE, bicim_sutunlar = NULL,
+                  ondalik_virgul = FALSE, basamak = 3,
+                  genislik = 6.3, punto = 9, satirlar = NULL,
+                  sutunlar = NULL, yeni_adlar = NULL) {
+
+  d <- oku(dosya)
+  if (is.null(d)) {
+    cat(sprintf("\n> **Dosya bulunamadı:** `%s` — ilgili betik çalıştırılmamış olabilir.\n\n",
+                dosya))
+    return(invisible(NULL))
+  }
+
+  if (!is.null(sutunlar))  d <- d[, intersect(sutunlar, names(d)), drop = FALSE]
+  if (!is.null(satirlar))  d <- d[satirlar, , drop = FALSE]
+  if (isTRUE(bicim_olasilik)) d <- bicimle_olasilik(d, bicim_sutunlar)
+  if (isTRUE(ondalik_virgul)) d <- virgul(d, basamak)
+  d <- bicimle_p(d)
+  if (!is.null(yeni_adlar)) names(d) <- yeni_adlar
+
+  ft <- flextable(d) |>
+    set_caption(baslik) |>
+    theme_booktabs() |>
+    fontsize(size = punto, part = "all") |>
+    font(fontname = "Times New Roman", part = "all") |>
+    bold(part = "header") |>
+    align(align = "center", part = "header") |>
+    align(j = 1, align = "left", part = "body") |>
+    padding(padding.top = 2, padding.bottom = 2, part = "all") |>
+    autofit() |>
+    fit_to_width(max_width = genislik)
+
+  if (!is.null(not))
+    ft <- add_footer_lines(ft, not) |>
+      fontsize(size = punto - 1, part = "footer") |>
+      italic(part = "footer")
+
+  ft
+}
+```
+
+\newpage
+
+# Yöntem tabloları
+
+## Tablo 5.4.2.1
+
+```{r tau-sens}
+tablo(
+  "tbl_tau_sensitivity.csv",
+  baslik = paste("Tablo 5.4.2.1. Sonlu eşik (τ) seçiminin yerleşme olasılığı",
+                 "üzerindeki etkisi: subkritik ve süperkritik rejim karşılaştırması"),
+  not = paste("τ→∞ sütunu klasik dallanma süreci sonucudur (1 − 1/R₀) ve yalnızca",
+              "R₀ > 1 için tanımlıdır. Subkritik rejimde sönme kesin olduğundan bu",
+              "ölçüt sıfır verir; sonlu eşik formülasyonu ise geçici eşik aşımı",
+              "olasılığını nicelemektedir."),
+  punto = 8
+)
+```
+
+## Tablo 5.4.2.2
+
+```{r tau-regime}
+d <- oku("tbl_tau_regime_shares.csv")
+if (!is.null(d)) {
+  d <- d |> filter(duzey == "ilce") |>
+    transmute(Senaryo = ssp, `İlçe` = rejim,
+              `Aktif ay` = n, `Süperkritik (%)` = oran_pct)
+  flextable(d) |>
+    set_caption(paste("Tablo 5.4.2.2. İlçe bazında süperkritik (R₀ ≥ 1)",
+                      "ilçe-ay hücrelerinin oranı")) |>
+    theme_booktabs() |>
+    fontsize(size = 9, part = "all") |>
+    font(fontname = "Times New Roman", part = "all") |>
+    bold(part = "header") |> autofit() |> fit_to_width(6.3)
+} else cat("\n> Dosya bulunamadı: tbl_tau_regime_shares.csv\n")
+```
+
+## Tablo 5.4.4
+
+```{r kvpd}
+tablo("tbl_kvpd_sensitivity.csv",
+      baslik = "Tablo 5.4.4. k_vpd duyarlılık analizi",
+      not = paste("k_vpd = 0,5 sütunu ana koşumun P_est değerlerine çapalanmıştır;",
+                  "baz senaryo ana bulgularla birebir örtüşmektedir."),
+      bicim_olasilik = TRUE)
+```
+
+\newpage
+
+# Bulgular tabloları
+
+## Tablo 6.5.1 — Ufuk boyu kümülatif risk
+
+```{r horizon-245}
+tablo("tbl_horizon.csv",
+      baslik = paste("Tablo 6.5.1. SSP2-4.5 senaryosunda ilçe bazında ufuk boyu",
+                     "kümülatif risk (2025–2075; 51 takvim yılı)"),
+      bicim_olasilik = TRUE)
+```
+
+> **Not:** Bu chunk yalnızca kök `outputs/tables/` içindeki dosyayı okur.
+> Senaryo bazlı tablolar için aşağıdaki döngüyü kullanın.
+
+```{r horizon-tum-ssp}
+SSPS <- c(ssp126 = "SSP1-2.6", ssp245 = "SSP2-4.5", ssp585 = "SSP5-8.5")
+
+for (s in names(SSPS)) {
+  p <- here("outputs", "_canonical", s, "tables", "tbl_horizon.csv")
+  if (!file.exists(p)) next
+  d <- read_csv(p, show_col_types = FALSE) |> bicimle_olasilik()
+  ft <- flextable(d) |>
+    set_caption(sprintf("Tablo 6.5.1.%d. %s — ufuk boyu kümülatif risk",
+                        which(names(SSPS) == s), SSPS[[s]])) |>
+    theme_booktabs() |>
+    fontsize(size = 9, part = "all") |>
+    font(fontname = "Times New Roman", part = "all") |>
+    bold(part = "header") |> autofit() |> fit_to_width(6.3)
+  flextable_to_rmd(ft)
+  cat("\n\n")
+}
+```
+
+## OAT duyarlılık
+
+```{r oat}
+tablo("tbl_oat_all_ssp.csv",
+      baslik = "Tablo 6.8.1. OAT duyarlılık analizi: P_ufuk değerleri",
+      not = paste("λ_local(i=1); m, β_vh ve IP parametrelerinde doğrusal olduğundan",
+                  "eşit oranlı pertürbasyonlar özdeş sonuç verir."),
+      punto = 8)
+```
+
+```{r tornado}
+tablo("tbl_oat_tornado_pp.csv",
+      baslik = "Tablo 6.8.2. Etkin çarpan sınıfı bazında değişim (yüzde puan)",
+      bicim_olasilik = TRUE, bicim_sutunlar = c("P", "P_base"), punto = 8)
+```
+
+## Regresyon
+
+```{r topt}
+tablo("topt_comparison.csv",
+      baslik = "Tablo 6.10.1. Termal optimum kestirimleri", punto = 8)
+```
+
+```{r lmm}
+tablo("lmm_r2_nakagawa.csv",
+      baslik = "Tablo 6.10.2. Nakagawa R² değerleri", ondalik_virgul = TRUE)
+
+tablo("lmm_ri_secondary.csv",
+      baslik = "Tablo 6.10.3. Rastgele kesişim modeli: ICC ve R²",
+      ondalik_virgul = TRUE)
+```
+
+## Doğrulama
+
+```{r validation}
+for (s in names(SSPS)) {
+  p <- here("outputs", "_canonical", s, "validation", "validation_stage2_jensen.csv")
+  if (!file.exists(p)) next
+  d <- read_csv(p, show_col_types = FALSE)
+  ft <- flextable(d) |>
+    set_caption(sprintf("Tablo 6.11.%d. %s — tahmin ediciler arası fark",
+                        which(names(SSPS) == s), SSPS[[s]])) |>
+    theme_booktabs() |>
+    fontsize(size = 8, part = "all") |>
+    font(fontname = "Times New Roman", part = "all") |>
+    bold(part = "header") |> autofit() |> fit_to_width(6.3)
+  flextable_to_rmd(ft)
+  cat("\n\n")
+}
+```
+
+\newpage
+
+# Oturum bilgisi
+
+```{r oturum, results='asis'}
+cat("Oluşturulma:", format(Sys.time(), "%d.%m.%Y %H:%M"), "\n\n")
+cat("R sürümü:", R.version.string, "\n\n")
+cat("Kaynak dizin:", DIR_TBL, "\n\n")
+
+man <- file.path(here("outputs", "_canonical"), "MANIFEST.csv")
+if (file.exists(man)) {
+  m <- read_csv(man, show_col_types = FALSE)
+  cat("Kanonik dosya sayısı:", nrow(m), "\n\n")
+  cat("Dondurma tarihi:", as.character(max(m$frozen_at, na.rm = TRUE)), "\n\n")
+}
+```

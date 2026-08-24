@@ -1,0 +1,91 @@
+# =========================================================
+# 02_figures_cross_scenario.R
+# Senaryolar arası birleşik figürler (dikey istif, 3 panel)
+# Kaynak PNG'ler 01_generate_ssp_outputs.R tarafından her SSP için üretilir.
+# Ön koşul: init.R / paths.R sourced (here, DIR_OUTPUT_CROSS, theme_thesis, ...)
+# =========================================================
+
+library(magick)
+library(patchwork)
+library(ggplot2)
+library(grid)
+library(here)
+
+SSP_LIST <- c("ssp126", "ssp245", "ssp585")   # klasör isimleriyle aynı olmalı
+
+# ---------------------------------------------------------
+# 0) Kaynak figürleri ÜÇ senaryo için (yeniden) ÜRET  —  EN ÖNEMLİ ADIM
+#
+#    KRİTİK: 01_...R senaryoyu Sys.getenv("SSP_SCENARIO") ile okur ve
+#    SSP_LABEL'i kendi tablosundan yeniden atar. Bu yüzden döngüde
+#    SSP_CODE / SSP_LABEL set etmek İŞE YARAMAZ; ortam değişkenini
+#    (Sys.setenv) set etmek gerekir. Aksi halde her iterasyon aynı
+#    senaryoyu üretir ve diskte eski (yanlış dilli) PNG'ler kalır.
+#
+#    Döngü birleştirmeden ÖNCE çalışmalı ki hiçbir birleşik figür
+#    bayat kaynaktan üretilmesin; eski PNG'ler aynı adla ÜZERİNE yazılır.
+# ---------------------------------------------------------
+for (ssp in SSP_LIST) {
+  Sys.setenv(SSP_SCENARIO = ssp)
+  source(here("R", "04_results", "01_generate_ssp_outputs.R"))
+}
+
+# ---------------------------------------------------------
+# Yardımcı: verilen figürü her SSP için oku, grob'a çevir,
+#           dikey istifle (ncol = 1) ve 300 DPI kaydet.
+#           (rasterGrob önceden render edilmiş PNG'leri döşer; panel
+#            etiketleri/lejantları kaynak figüre gömülüdür — dil/lejant
+#            düzeltmesi 01_...R'de yapılır, burada değil.)
+#           Eksik dosya varsa o senaryo atlanır; hiç yoksa uyarır.
+# ---------------------------------------------------------
+combine_vertical <- function(fig_name, out_name, width = 10, height = 15) {
+  grobs <- lapply(SSP_LIST, function(s) {
+    path <- here("outputs", s, "figures", fig_name)
+    if (file.exists(path)) rasterGrob(image_read(path), interpolate = TRUE) else NULL
+  })
+  grobs <- grobs[!vapply(grobs, is.null, logical(1))]
+  if (length(grobs) == 0L) {
+    warning("Hic figur bulunamadi, atlaniyor: ", fig_name)
+    return(invisible(NULL))
+  }
+  combined <- wrap_plots(grobs) + plot_layout(ncol = 1)
+  ggsave(
+    filename = here(DIR_OUTPUT_CROSS, out_name),
+    plot = combined, dpi = 300, width = width, height = height, units = "in"
+  )
+  message(sprintf("Kaydedildi: %-40s (%d panel)", out_name, length(grobs)))
+  invisible(combined)
+}
+
+# ---------------------------------------------------------
+# Birlestirilecek TUM senaryo-panelli figurler
+# (kaynak dosya adi 01_...R'deki ggsave adlariyla birebir ayni;
+#  yeni bir figur eklemek icin tek satir ekleyin)
+#  Not: fig_yearly_risk_en (Ingilizce alternatif) ve tek-senaryo
+#  figurleri kasitli olarak disarida; gerekiyorsa satir ekleyin.
+# ---------------------------------------------------------
+fig_specs <- list(
+  # kaynak dosya               cikti adi                                        w    h
+  list("fig_temp_rh.png",        "combined_plot_temp_rh_profile_vertical.png",   9, 18),
+  list("fig_heatmap_lambda.png", "combined_plot_heatmap_lambda.png",            12, 15),
+  list("fig_pest_season.png",    "combined_plot_pest_season.png",               10, 15),
+  list("fig_yearly_risk.png",    "combined_plot_yearly_risk.png",                9, 15),
+  list("fig_import_trend.png",   "combined_plot_import_trend.png",               9, 15),
+  list("fig_import_heatmap.png", "combined_plot_import_heatmap.png",            12, 15),
+  list("fig_validation.png",     "combined_plot_validation.png",                12, 15),
+  list("fig_prcc.png",           "combined_plot_prcc.png",                       9, 15),
+  list("fig_csi_heat.png",       "combined_plot_csi_heat.png",                  10, 15),
+  list("fig_csi_trend.png",      "combined_plot_csi_trend.png",                  9, 15),
+  list("fig_decade.png",         "combined_plot_decade.png",                     9, 15),
+  list("fig_season.png",         "combined_plot_season.png",                     9, 15),
+  # asagidakiler 01_...R'de kosullu bloklarda uretilir (paket varsa);
+  # dosya yoksa combine_vertical otomatik atlar
+  list("fig_tornado.png",        "combined_plot_tornado.png",                    9, 15),
+  list("fig_country_contrib.png","combined_plot_country_contrib.png",            9, 15),
+  list("fig_moran.png",          "combined_plot_moran.png",                      9, 15)
+)
+
+for (spec in fig_specs) {
+  combine_vertical(fig_name = spec[[1]], out_name = spec[[2]],
+                   width = spec[[3]], height = spec[[4]])
+}

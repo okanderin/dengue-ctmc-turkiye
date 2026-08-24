@@ -1,0 +1,22 @@
+ssp,rejim,n,oran_pct,duzey
+SSP1-2.6,subkritik (R0<1),1607,95.5,senaryo
+SSP1-2.6,superkritik (R0>=1),76,4.5,senaryo
+SSP2-4.5,subkritik (R0<1),1621,94.2,senaryo
+SSP2-4.5,superkritik (R0>=1),99,5.8,senaryo
+SSP5-8.5,subkritik (R0<1),1594,91.3,senaryo
+SSP5-8.5,superkritik (R0>=1),151,8.7,senaryo
+SSP1-2.6,Egirdir,327,0,ilce
+SSP1-2.6,Fethiye,398,0,ilce
+SSP1-2.6,Hopa,259,1.5,ilce
+SSP1-2.6,Kartal,421,15.9,ilce
+SSP1-2.6,Zonguldak,278,1.8,ilce
+SSP2-4.5,Egirdir,333,0,ilce
+SSP2-4.5,Fethiye,409,0,ilce
+SSP2-4.5,Hopa,274,5.5,ilce
+SSP2-4.5,Kartal,418,16.5,ilce
+SSP2-4.5,Zonguldak,286,5.2,ilce
+SSP5-8.5,Egirdir,331,0,ilce
+SSP5-8.5,Fethiye,412,0,ilce
+SSP5-8.5,Hopa,273,11,ilce
+SSP5-8.5,Kartal,442,19.9,ilce
+SSP5-8.5,Zonguldak,287,11.5,ilce

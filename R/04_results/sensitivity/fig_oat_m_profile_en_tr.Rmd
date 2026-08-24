@@ -1,0 +1,163 @@
+```{r oat-en-setup, include=FALSE}
+# =====================================================================
+# Bagimliliklari yukle (bu Rmd TEK BASINA knit edilebilsin diye).
+# Ana bulgular Rmd'sinin icinde calistiriliyorsa bu chunk zararsizdir.
+# Yol adlari repo yapisina gore: R/01_setup/init.R, R/04_results/00_results_setup.R
+# =====================================================================
+source(here::here("R", "01_setup", "init.R"))               # paths.R -> DIR_OUTPUT_CROSS, paketler
+source(here::here("R", "04_results", "00_results_setup.R")) # DISTRICT_LABELS, COL_DISTRICT, theme_thesis
+
+suppressPackageStartupMessages({library(readr); library(dplyr); library(purrr)})
+
+# m senaryolari -> m degeri (klasor adlari: m_050/m_080/m_120/m_200; baz m=1.00 = ana simulasyon)
+m_values <- c(m_050 = 0.50, m_080 = 0.80, m_100 = 1.00, m_120 = 1.20, m_200 = 2.00)
+ssp_map  <- c(ssp126 = "SSP1-2.6", ssp245 = "SSP2-4.5", ssp585 = "SSP5-8.5")
+
+.read_h <- function(path) {
+  readr::read_csv(path, show_col_types = FALSE) %>%
+    transmute(district_id, p_ufuk = p_ge1_major_mean)
+}
+
+# oat_all'i post-Poisson OAT agacindan (sensitivity/ctmc_mc) uzun formatta kur.
+oat_all <- imap_dfr(ssp_map, function(ssp_lab, s) {
+  bd <- here::here("outputs", s, "sensitivity", "ctmc_mc")
+  oat <- if (dir.exists(bd)) {
+    folders <- list.dirs(bd, recursive = FALSE, full.names = FALSE)
+    imap_dfr(setNames(folders, folders), function(f, nm) {
+      ff <- list.files(file.path(bd, f), "ctmc_spark_horizon.*rep1000.*csv$", full.names = TRUE)
+      if (!length(ff)) return(NULL)
+      .read_h(ff[which.max(file.mtime(ff))]) %>% mutate(scenario = nm)
+    })
+  } else NULL
+  # baz m=1.00: ana simulasyon horizon dosyasi
+  mf <- list.files(here::here("outputs", s, "simulation"),
+                   "ctmc_spark_horizon.*rep1000.*csv$", full.names = TRUE)
+  base <- .read_h(mf[which.max(file.mtime(mf))]) %>% mutate(scenario = "m_100")
+  bind_rows(oat, base) %>% mutate(ssp_label = ssp_lab)
+}) %>%
+  filter(scenario %in% names(m_values)) %>%
+  mutate(district_label = unname(DISTRICT_LABELS[district_id])) %>%
+  filter(!is.na(district_label))
+```
+
+```{r fig-oat-profile-en, fig.cap="OAT sensitivity analysis: effect of the m parameter on P_horizon. Each line represents a district; panels represent SSP scenarios. The vertical dashed line indicates the baseline scenario (m = 1.00).", fig.height=6, fig.width=10}
+# ---- OAT profile plot (English) ----
+
+# Ingilizce ilce etiketleri: yalnizca Istanbul -> Istanbul
+DISTRICT_LABELS_EN <- gsub("\u0130stanbul", "Istanbul", DISTRICT_LABELS)
+
+oat_plot_data <- oat_all %>%
+  mutate(
+    m_numeric = m_values[scenario],
+    ssp_label = factor(ssp_label, levels = c("SSP1-2.6", "SSP2-4.5", "SSP5-8.5"))
+  ) %>%
+  filter(p_ufuk > 0)  # log olcek icin sifirlari ele
+
+fig_oat <- ggplot(oat_plot_data,
+                  aes(x = m_numeric, y = p_ufuk,
+                      colour = district_id,
+                      group = district_label)) +
+  geom_vline(xintercept = 1.0, linetype = "dashed",
+             colour = "grey50", linewidth = 0.5) +
+  geom_line(linewidth = 0.8, alpha = 0.8) +
+  geom_point(size = 2.5, alpha = 0.9) +
+  geom_hline(yintercept = 0.01, linetype = "dotted",
+             colour = "grey70", linewidth = 0.4) +
+  annotate("text", x = 2.05, y = 0.012, label = "1%",
+           size = 2.5, colour = "grey50", hjust = 0) +
+  scale_y_log10(
+    breaks = scales::trans_breaks("log10", function(x) 10^x),
+    labels = scales::trans_format("log10", scales::math_format(10^.x))
+  ) +
+  scale_x_continuous(
+    breaks = c(0.5, 0.8, 1.0, 1.2, 2.0),
+    labels = c("0.50", "0.80", "1.00", "1.20", "2.00")
+  ) +
+  scale_colour_manual(
+    values = COL_DISTRICT,
+    labels = DISTRICT_LABELS_EN,
+    name = NULL
+  ) +
+  facet_wrap(~ssp_label, ncol = 3) +
+  labs(
+    x = expression("Mosquito-to-human ratio (" * italic(m) * ")"),
+    y = expression(P[horizon] ~ "(log scale)"),
+    title = expression("OAT: effect of " * italic(m) * " on cumulative establishment risk"),
+    subtitle = "\u03c4 = 30, \u03b3 = 0.20 day\u207b\u00b9. Dashed line: baseline scenario (m = 1.00)"
+  ) +
+  theme_thesis() +
+  theme(
+    strip.text = element_text(size = 10, face = "bold"),
+    legend.position = "bottom"
+  )
+
+print(fig_oat)
+
+ggsave(
+  filename = "fig_oat_m_profile_en.png",
+  plot = fig_oat,
+  path = DIR_OUTPUT_CROSS,
+  width = 10, height = 6,
+  dpi = 300, bg = "white"
+)
+```
+
+```{r fig-oat-profile-tr, fig.cap="Sivrisinek/insan orani (m) parametresinin tek parametre degisim (OAT) ile duyarlilik analizi. Her cizgi bir ilceyi, paneller SSP senaryolarini gosterir. Dikey kesikli cizgi baz senaryoyu (m = 1,00) belirtir.", fig.height=6, fig.width=10}
+# ---- OAT profil grafigi (Turkce) ----
+# oat_all + m_values yukaridaki setup chunk'inda kuruldu; yeniden kullaniliyor.
+
+oat_plot_data_tr <- oat_all %>%
+  mutate(
+    m_numeric = m_values[scenario],
+    ssp_label = factor(ssp_label, levels = c("SSP1-2.6", "SSP2-4.5", "SSP5-8.5"))
+  ) %>%
+  filter(p_ufuk > 0)  # log olcek icin sifirlari ele
+
+fig_oat_tr <- ggplot(oat_plot_data_tr,
+                     aes(x = m_numeric, y = p_ufuk,
+                         colour = district_id,
+                         group = district_label)) +
+  geom_vline(xintercept = 1.0, linetype = "dashed",
+             colour = "grey50", linewidth = 0.5) +
+  geom_line(linewidth = 0.8, alpha = 0.8) +
+  geom_point(size = 2.5, alpha = 0.9) +
+  geom_hline(yintercept = 0.01, linetype = "dotted",
+             colour = "grey70", linewidth = 0.4) +
+  annotate("text", x = 2.05, y = 0.012, label = "%1",
+           size = 2.5, colour = "grey50", hjust = 0) +
+  scale_y_log10(
+    breaks = scales::trans_breaks("log10", function(x) 10^x),
+    labels = scales::trans_format("log10", scales::math_format(10^.x))
+  ) +
+  scale_x_continuous(
+    breaks = c(0.5, 0.8, 1.0, 1.2, 2.0),
+    labels = c("0,50", "0,80", "1,00", "1,20", "2,00")
+  ) +
+  scale_colour_manual(
+    values = COL_DISTRICT,
+    labels = DISTRICT_LABELS,   # Turkce etiketler (Istanbul duzeltmesi YOK)
+    name   = "\u0130lçe"        # "İlçe"
+  ) +
+  facet_wrap(~ssp_label, ncol = 3) +
+  labs(
+    x = expression("Sivrisinek/insan oran\u0131 (" * italic(m) * ")"),
+    y = expression(P["ufuk"] ~ "(log ölçek)"),
+    title = expression("OAT: " * italic(m) * " parametresinin kümülatif risk üzerindeki etkisi"),
+    subtitle = "\u03c4 = 30, \u03b3 = 0,20 gün\u207b\u00b9. Kesikli çizgi: baz senaryo (m = 1,00)"
+  ) +
+  theme_thesis() +
+  theme(
+    strip.text = element_text(size = 10, face = "bold"),
+    legend.position = "bottom"
+  )
+
+print(fig_oat_tr)
+
+ggsave(
+  filename = "fig_oat_m_profile.png",
+  plot = fig_oat_tr,
+  path = DIR_OUTPUT_CROSS,
+  width = 10, height = 6,
+  dpi = 300, bg = "white"
+)
+```
