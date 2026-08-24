@@ -1,0 +1,3 @@
+Model,R2_marjinal,R2_kosullu
+LMM1: rastgele kesisim,0.72,0.955
+LMM2: kesisim + egim (kesifsel),0.812,0.992

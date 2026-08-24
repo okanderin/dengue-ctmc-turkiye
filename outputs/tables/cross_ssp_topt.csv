@@ -1,0 +1,4 @@
+SSP_code,SSP_label,n_total,n_censored,T_opt_mech_alb,T_opt_tobit
+ssp126,SSP1-2.6,3060,2206,27.54,26.15
+ssp245,SSP2-4.5,3060,2192,27.56,26.35
+ssp585,SSP5-8.5,3060,2116,27.56,26.52

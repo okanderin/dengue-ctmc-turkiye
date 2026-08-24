@@ -1,0 +1,6 @@
+metric,value,note
+ICC_adjusted,0.839,
+R2_marginal,0.72,
+R2_conditional,0.955,
+n_clusters,5,
+note,NA,5 kume: varyans bilesenleri yaklasik; birincil T_opt DEGIL
