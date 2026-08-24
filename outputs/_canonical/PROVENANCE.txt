@@ -1,0 +1,21 @@
+frozen_at   : 2026-08-15 00:08:41 +03
+R version   : R version 4.5.2 (2025-10-31 ucrt)
+n_files     : 118
+MC src      : C:/Users/oderin/Documents/drive/000000_tezim/0000_tezim/r_project_tez/outputs/ssp245/simulation
+ANALYTIC src: C:/Users/oderin/Documents/drive/000000_tezim/0000_tezim/r_project_tez/outputs/ssp245/model_results
+OAT src     : C:/Users/oderin/Documents/drive/000000_tezim/0000_tezim/r_project_tez/outputs/{ssp}/sensitivity/ctmc_mc
+
+DIZIN ANLAMLARI
+  simulation/  = ctmc_spark_monte_carlo.R  (stokastik, n_rep=1000)
+  analytic/    = ctmc_spark.R              (gambler's ruin, deterministik)
+  oat/         = sensitivity_ctmc_mc.R     (tek-parametre-degisim)
+  importation/ = run_sensitivity_importation.R (eta, k)
+  tables/      = 06_10_pest_regression.R + kvpd + Ek A4
+
+KURAL
+  bulgular_yeni_tam.Rmd YALNIZCA outputs/_canonical/ okur.
+  Rmd icinde simulasyon cagrisi = hata.
+
+NOT
+  OAT'ta m=0.80, beta_vh-%20 ve IP-%20 ozdes P_ufuk verir; lambda bu uc
+  parametrede dogrusal oldugundan beklenen davranistir (artefakt degil).
