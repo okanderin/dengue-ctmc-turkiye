@@ -1,0 +1,3 @@
+Değişken,Moran's I,p-değeri,Yorum
+log₁₀(p_ge1_major),-0.5249,0.157,"Anlamlı otokorelasyon yok (n=5, güç sınırlı)"
+CSI,-0.1296,0.58,"Anlamlı otokorelasyon yok (n=5, güç sınırlı)"
