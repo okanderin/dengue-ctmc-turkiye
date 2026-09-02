@@ -1,5 +1,5 @@
 # ==========================================================
-# Dengue Yerleşme Riski — CTMC Spark-Phase Model
+# Dengue Eşik-Aşımı Riski — CTMC Spark-Phase Model
 # Shiny Uygulaması (shinyapps.io uyumlu)
 #
 # Veri kaynağı: r_project_tez/outputs/_canonical (dondurulmuş kanonik
@@ -7,14 +7,13 @@
 # üretilen ek analizler, örn. tau-eşiği duyarlılığı) içinden bu
 # uygulamanın outputs/ klasörüne senkronize edilir. R tarafındaki
 # analiz pipeline'ı R/04_results altında core / validation / sensitivity /
-# regression / diagnostics / reports olarak alt klasörlere ayrılmıştır
-# (bkz. R/00_maintenance/14_restructure_04_results.R,
-# 15_reorganize_04_results_faz2.R); bu uygulama yalnızca dondurulmuş
+# regression / diagnostics / reports olarak alt klasörlere ayrılmıştır;
+# bu uygulama yalnızca dondurulmuş
 # CSV çıktılarını okur, pipeline script'lerine bağımlı değildir.
 #
 # Sekmeler:
 #   1) What-If Hesaplayıcı     — anlık P_est / R0 hesabı (veri gerekmez)
-#   2) Serbest Konum (P_ufuk)  — keyfi konum için 50 yıl kümülatif risk
+#   2) Serbest Konum (P_ufuk)  — keyfi konum için 50 yıl kümülatif eşik-aşımı riski
 #   3) Projeksiyon Tarayıcı    — pre-computed MC çıktıları (opsiyonel)
 #   4) Duyarlılık & Doğrulama  — OAT/k_vpd/tau duyarlılığı + CTMC doğrulama
 #   5) Hakkında                — model özeti, kullanım kılavuzu, referanslar
@@ -320,7 +319,7 @@ app_css <- "
 # ==============================================================
 
 ui <- navbarPage(
-  title = "Dengue Yerleşme Riski — CTMC Spark",
+  title = "Dengue Eşik-Aşımı Riski — CTMC Spark",
   header = tags$head(tags$style(HTML(app_css))),
   
   # ============================================================
@@ -330,7 +329,7 @@ ui <- navbarPage(
            fluidRow(column(12,
                            div(class = "info-box",
                                HTML("Kendi iklim ve model parametrelerinizi girerek tek ay için
-             <strong>otoktona salgın yerleşme olasılığını (P<sub>est</sub>)</strong>
+             <strong>otokton bulaş zincirinin operasyonel eşiğe ulaşma olasılığını (P<sub>est</sub>)</strong>
              ve <strong>R<sub>0</sub></strong>'ı hesaplayın.
              Deterministik EIP + sonlu-eşikli gambler's ruin (τ = 30) formülü kullanılır."))
            )),
@@ -350,7 +349,7 @@ ui <- navbarPage(
                           sliderInput("wf_beta_vh", "β_vh (vektör→insan)",  0.05, 0.80, 0.30, 0.01),
                           sliderInput("wf_beta_hv", "β_hv (insan→vektör)",  0.05, 0.80, 0.33, 0.01),
                           sliderInput("wf_ip",      "Enfeksiyöz dönem (gün)", 2, 14, 5, 1),
-                          numericInput("wf_tau",    "Salgın eşiği (τ)", 30, 5, 100, 5),
+                          numericInput("wf_tau",    "Operasyonel eşik (τ)", 30, 5, 100, 5),
                           hr(),
                           h4("İthalat Baskısı"),
                           numericInput("wf_lambda", "Aylık beklenen ithal vaka (λ)",
@@ -372,12 +371,12 @@ ui <- navbarPage(
                                        div(class = "metric-label", "R₀")
                          )),
                          column(4, div(class = "result-card",
-                                       div(class = "metric-label", "Yerleşme Olasılığı"),
+                                       div(class = "metric-label", "Eşiğe Ulaşma Olasılığı"),
                                        div(class = "metric-big",   textOutput("wf_Pest",  inline = TRUE)),
                                        div(class = "metric-label", "P_est (τ-sonlu)")
                          )),
                          column(4, div(class = "result-card",
-                                       div(class = "metric-label", "Aylık Salgın Olas."),
+                                       div(class = "metric-label", "Aylık Eşik-Aşımı Olas."),
                                        div(class = "metric-big",   textOutput("wf_Pmon",  inline = TRUE)),
                                        div(class = "metric-label", "q_import × P_est")
                          ))
@@ -552,7 +551,7 @@ ui <- navbarPage(
                                HTML("Model çıktılarının <strong>doğrulaması</strong> (analitik çözümle
              karşılaştırma, EIP heterojenliği/Jensen sapması) ve parametre
              <strong>duyarlılık analizleri</strong> (tek-seferde-bir OAT, VPD-mortalite
-             katsayısı k<sub>vpd</sub>, salgın eşiği τ). Kanonik çıktılardan
+             katsayısı k<sub>vpd</sub>, operasyonel eşik τ). Kanonik çıktılardan
              (<code>outputs/_canonical</code>, <code>outputs/tables</code>) önceden hesaplanmıştır."))
            )),
 
@@ -595,7 +594,7 @@ ui <- navbarPage(
            ),
            hr(),
 
-           h4("4) Salgın Eşiği (τ) Duyarlılığı"),
+           h4("4) Operasyonel Eşik (τ) Duyarlılığı"),
            div(class = "result-card",
                p(style = "font-size:.85em; color:#555;",
                  "Uygulamanın geri kalanında kullanılan τ=30 eşiğinin gerekçesi: farklı
@@ -610,8 +609,8 @@ ui <- navbarPage(
   tabPanel("Hakkında",
            fluidRow(column(8, offset = 2,
                            div(class = "result-card",
-                               h3("Dengue Yerleşme Riski — CTMC Spark Model"),
-                               p("Bu uygulama, Türkiye'de dengue humması otoktona salgın yerleşme
+                               h3("Dengue Eşik-Aşımı Riski — CTMC Spark Model"),
+                               p("Bu uygulama, Türkiye'de dengue humması otokton bulaş zincirinin operasyonel eşiğe ulaşma
           riskini değerlendiren CTMC spark-phase birth-death modelinin
           interaktif arayüzüdür."),
                                hr(),
@@ -624,7 +623,7 @@ ui <- navbarPage(
                                  tags$li(HTML("<strong>Serbest Konum (P_ufuk)</strong> — Sentinel ilçeler dışında,
                        kendi aylık sıcaklık/nem döngünüzü ve ithalat baskınızı girerek
                        herhangi bir konum için 1 yıllık ve N-yıllık (varsayılan 50)
-                       kümülatif yerleşme riskini (P_ufuk) hesaplar; veri dosyası gerekmez.")),
+                       kümülatif eşik-aşımı riskini (P_ufuk) hesaplar; veri dosyası gerekmez.")),
                                  tags$li(HTML("<strong>Projeksiyon Tarayıcı</strong> — Beş sentinel ilçe için
                        önceden hesaplanmış 1000-tekrarlı Monte Carlo simülasyon çıktılarını
                        (2025–2075, 3 SSP senaryosu) yıl/senaryo/ilçe filtreleriyle inceler;
@@ -836,7 +835,7 @@ server <- function(input, output, session) {
                    linetype = "dotted", colour = "grey40") +
         scale_y_log10(labels = label_scientific()) +
         labs(x = "Sıcaklık (°C)", y = "P_est (log)",
-             title = "Yerleşme Olasılığı vs Sıcaklık") +
+             title = "Eşiğe Ulaşma Olasılığı vs Sıcaklık") +
         theme_app()
       
       grid.arrange(p1, p2, ncol = 2)
@@ -1018,7 +1017,7 @@ server <- function(input, output, session) {
         scale_colour_manual(values=COL_DISTRICT, labels=DISTRICT_LABELS, name="İlçe") +
         scale_fill_manual(values=COL_DISTRICT, labels=DISTRICT_LABELS, guide="none") +
         labs(x="Yıl", y="P[≥1 majör/yıl]",
-             title="Yıllık Otoktona Salgın Riski") +
+             title="Yıllık Eşik-Aşımı Riski") +
         theme_app()
       if (input$proj_ssp == "all")
         p <- p + facet_wrap(~ssp, labeller=labeller(ssp=SSP_LABELS))
@@ -1035,7 +1034,7 @@ server <- function(input, output, session) {
       p <- ggplot(d, aes(month_name, pm, group=district_label, colour=district_id)) +
         geom_line(linewidth=0.8) + geom_point(size=2) +
         scale_colour_manual(values=COL_DISTRICT,labels=DISTRICT_LABELS,name="İlçe") +
-        labs(x=NULL, y="P_est", title="Mevsimsel Yerleşme Profili") +
+        labs(x=NULL, y="P_est", title="Mevsimsel Eşik-Aşımı Profili") +
         theme_app()
       if (input$proj_ssp == "all")
         p <- p + facet_wrap(~ssp, labeller=labeller(ssp=SSP_LABELS))

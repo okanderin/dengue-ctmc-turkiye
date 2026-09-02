@@ -1,4 +1,4 @@
----
+<!-- Standalone R Markdown fragment; intentionally has no YAML front matter. -->
 # ══════════════════════════════════════════════════════════════════
 #  EK ANALİZ BLOKLARI — bulgular_full_metin.Rmd'ye eklenecek
 #  Bu bloklar mevcut dosyanın ## Sıcaklık–Risk Korelasyonu bölümüne

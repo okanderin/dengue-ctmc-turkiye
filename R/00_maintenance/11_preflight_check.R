@@ -52,7 +52,9 @@ for (f in files) {
   for (i in seq_along(txt)) {
     line <- txt[i]
     if (grepl("^\\s*#", line)) next
-    if (!grepl("source|render|read_csv|readRDS|read\\.csv|file\\.path|here\\(", line)) next
+    # Only executable file-loading calls are references. A bare file.path()/
+    # here() may intentionally construct an optional path for file.exists().
+    if (!grepl("source|render|read_csv|readRDS|read\\.csv", line)) next
     m <- regmatches(line, gregexpr(pat, line, perl = TRUE))[[1]]
     for (raw in m) {
       p  <- gsub("^[\"']|[\"']$", "", raw)

@@ -82,9 +82,6 @@ step <- function(label, expr, check_paths = NULL) {
 # -----------------------------------------------------------------------------
 # 01_setup  (her zaman)
 # -----------------------------------------------------------------------------
-source_utf8("R/01_setup/paths.R")
-source_utf8("R/01_setup/packages.R")
-source_utf8("R/01_setup/global_options.R")
 source_utf8("R/01_setup/init.R")
 
 # =============================================================================
@@ -138,12 +135,19 @@ if ("03" %in% STAGES) {
        source_utf8("R/04_results/core/run_pipeline_3_4.R"))
 
   # Jensen REFERANS kosumu (ctmc_spark.R). §6.1.2 Asama 2 tablosunu besler.
-  # TEMIZ oturum gerektirir: ayni oturumda ctmc_spark_monte_carlo.R source
-  # edilmisse run_ctmc_spark() ad cakismasi olur. Bu yuzden ayri kosun:
-  #   source("R/03_models/run_ctmc_spark_all_ssp.R", encoding = "UTF-8")
-  message("\n[NOT] Jensen referans kosumu (ctmc_spark.R) TEMIZ bir R oturumunda ",
-          "ayrica calistirilmali:\n      ",
-          "source(\"R/03_models/run_ctmc_spark_all_ssp.R\", encoding = \"UTF-8\")\n")
+  # Ana kosumla fonksiyon adlari cakismamasi icin temiz bir alt R oturumunda
+  # calistirilir.
+  step("Jensen reference run (isolated R process)", {
+    rscript <- file.path(R.home("bin"), "Rscript")
+    status <- system2(
+      rscript,
+      args = c("--vanilla", "R/03_models/run_ctmc_spark_all_ssp.R")
+    )
+    if (!identical(status, 0L)) {
+      stop("Jensen reference subprocess failed with status ", status,
+           call. = FALSE)
+    }
+  })
 
   for (s in SSP_LIST) {
     Sys.setenv(SSP_SCENARIO = s)
@@ -166,10 +170,8 @@ if ("04" %in% STAGES) {
          source_utf8("R/04_results/00_results_setup.R"))
     step(paste0("01_generate_ssp_outputs [", s, "]"),
          source_utf8("R/04_results/core/01_generate_ssp_outputs.R"))
-    step(paste0("mc_validation_vs_analytic [", s, "]"),
-         source_utf8("R/04_results/validation/mc_validation_vs_analytic.R"))
-    step(paste0("validation_two_stage [", s, "]"),
-         source_utf8("R/validation_two_stage.R"))
+    step(paste0("stage2_eip_estimator_sensitivity [", s, "]"),
+         source_utf8("R/04_results/validation/stage2_eip_estimator_sensitivity.R"))
     step(paste0("11_csi_isi_haritasi [", s, "]"),
          source_utf8("R/04_results/figures_misc/11_csi_isi_haritasi.R"))
   }
@@ -178,7 +180,6 @@ if ("04" %in% STAGES) {
   step("02_figures_cross_scenario",  source_utf8("R/04_results/core/02_figures_cross_scenario.R"))
   step("6_10_pest_regression",       source_utf8("R/04_results/regression/6_10_pest_regression.R"))
   step("6_10b_regression_ols_lmm",   source_utf8("R/04_results/regression/6_10b_regression_ols_lmm.R"))
-  step("taylor_proof_and_validation",source_utf8("R/04_results/validation/taylor_proof_and_validation.R"))
   step("convexity_check",            source_utf8("R/04_results/validation/convexity_check.R"))
   # [ARSIVLENDI 2026-08-22: R/04_results/_archive/LHS_PRCC_EN_ref_1-1.R - orphan/kullanilmiyor, bkz. 14_restructure_04_results.R] step("LHS_PRCC_EN_ref_1-1",        source_utf8("R/04_results/LHS_PRCC_EN_ref_1-1.R"))
   step("build_eip_sdlog_table",      source_utf8("R/04_results/regression/build_eip_sdlog_table.R"))

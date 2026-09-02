@@ -591,17 +591,16 @@ cat("  İthalat baskısı grafikleri ve tablosu kaydedildi.\n")
 
 
 ## =========================================================
-## 6) AŞAMA 2 — Tahmin Edici Karşılaştırması (sigma_EIP > 0)
+## 6) AŞAMA 1 — Sayısal/yazılım doğrulaması
 ## ---------------------------------------------------------
-## v2 NOTU: v1'de bu bolum "Model dogrulamasi" olarak adlandiriliyordu.
-## Ancak burada karsilastirilan iki nicelik sunlardir:
-##   - p_establishment_mean = E[P_est(EIP)]   (stokastik EIP, birincil)
-##   - P_est_analytic       = P_est(E[EIP])   (yerine-koyma)
-## Bu, tezdeki ASAMA 2'dir (tahmin edici karsilastirmasi).
-## ASAMA 1 (yazilim dogrulamasi) sigma_EIP = 0 ile ayri bir kosu
-## gerektirir ve bu betikte YAPILMAZ; bkz. validation_two_stage.R.
+## Kaydedilmiş üretim çıktısındaki P_est değerleri, aynı kaydedilmiş ortalama
+## lambda değerlerine doğrudan uygulanan sonlu-eşik kumarbazın iflası formülüyle
+## karşılaştırılır. Bu içsel sayısal kontroldür; dış/geçerlik doğrulaması değildir.
+##
+## AŞAMA 2, EIP dönüşüm sırasına duyarlılığı ayrı olarak karşılaştırır:
+## R/04_results/validation/stage2_eip_estimator_sensitivity.R
 ## =========================================================
-cat(">>> 6) Aşama 2 — tahmin edici karşılaştırması <<<\n")
+cat(">>> 6) Aşama 1 — sayısal/yazılım doğrulaması <<<\n")
 
 val_df <- monthly %>%
   mutate(
@@ -619,14 +618,14 @@ val_df <- monthly %>%
 
 val_active <- filter(val_df, active)
 
-# Jensen yonu: tez, TUM aktif hucrelerde P_est(E[EIP]) > E[P_est(EIP)]
-# oldugunu iddia eder. Burada dogrulaniyor.
+# Isaretli fark, kayıtlı ortalama P_est ile ortalama lambda üzerinden yeniden
+# hesaplanan kapalı-form değer arasındaki sayısal sapmayı izler.
 n_yon_ihlali <- sum(val_active$signed_diff < 0, na.rm = TRUE)
 
 val_summary <- tibble(
   Metrik = c("Toplam kombinasyon", "Aktif (λ>0)",
              "Ort. |fark|", "Maks |fark|", "< 0.02 eşiği",
-             "Jensen yön ihlali (P_est(E[EIP]) < E[P_est(EIP)])"),
+             "Negatif işaretli fark"),
   Değer = c(nrow(val_df), nrow(val_active),
             formatC(mean(val_active$abs_diff), format = "e", digits = 2),
             formatC(max(val_active$abs_diff), format = "e", digits = 2),
@@ -637,10 +636,9 @@ val_summary <- tibble(
 write_csv(val_summary, file.path(DIR_TBL, "tbl_validation.csv"))
 
 if (n_yon_ihlali > 0)
-  warning(sprintf("[ASAMA 2] %d aktif hucrede Jensen yonu tersine donmus. Tez metni\n",
+  message(sprintf("[ASAMA 1] %d aktif hucrede kayitli ortalama ile yeniden ",
                   n_yon_ihlali),
-          "  'yon hicbir hucrede tersine donmemistir' diyor; guncellenmelidir.",
-          call. = FALSE)
+          "hesaplanan degerin isaretli farki negatiftir.")
 
 val_plot <- val_active %>%
   censor_log("P_est_analytic",       etiket = "P_est analitik") %>%
@@ -655,11 +653,11 @@ fig_val <- ggplot(val_plot, aes(x = P_est_analytic,
   scale_x_log10(labels = label_scientific()) +
   scale_y_log10(labels = label_scientific()) +
   scale_colour_manual(values = COL_DISTRICT_LABEL, name = NULL) +
-  labs(x = expression(P[est](E*"["*EIP*"]")~" (yerine-koyma)"),
-       y = expression(E*"["*P[est](EIP)*"]"~" (birincil, MC)"),
-       title = paste("Aşama 2 — tahmin edici karşılaştırması —", SSP_LABEL),
+  labs(x = expression(P[est]~"(kayıtlı ortalama lambda ile kapalı form)"),
+       y = expression(P[est]~"(üretim çıktısı)"),
+       title = paste("Aşama 1 — sayısal/yazılım doğrulaması —", SSP_LABEL),
        caption = paste0("Gürültü tabanı 10\u207b\u00b9\u2075 altındaki hücreler çizilmemiştir. ",
-                        "Bu bir yazılım doğrulaması (Aşama 1) değildir.")) +
+                        "Bu kontrol gözlemsel dış doğrulama değildir.")) +
   theme_thesis() +
   theme(plot.caption = element_text(size = 8, colour = "grey40", hjust = 0))
 

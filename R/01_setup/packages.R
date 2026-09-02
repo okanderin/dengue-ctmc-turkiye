@@ -10,7 +10,7 @@
 ## ----------------------------------------------------------
 
 pkgs <- c(
-  
+
   # ---- Core data wrangling ----
   "dplyr",
   "tidyr",
@@ -20,31 +20,37 @@ pkgs <- c(
   "tibble",
   "purrr",
   "tidyverse",
+  "forcats",
   "gridExtra",
-  
+
   # ---- Text / encoding robustness (Turkish chars etc.) ----
   "stringi",
-  
+
   # ---- Spatial & raster (climate, districts) ----
   "sf",
   "terra",
   "exactextractr",
-  
+
   # ---- Project structure & reproducibility ----
   "here",
-  
+  "rprojroot",
+
   # ---- Diagnostics / utilities ----
-  "rlang",
-  
+  "rlang", "digest", "janitor",
+
   # CTMC / stochastic phase
-  "expm", "Matrix", 
-  
+  "Matrix",
+
   # Visualization
-  "ggplot2", "patchwork", "igraph", "tmap", "grid",
-  
+  "ggplot2", "patchwork", "ggrepel", "scales", "magick", "grid",
+
   # Tables / reporting
-  "gtsummary", "flextable"
-  
+  "readxl", "knitr", "rmarkdown", "kableExtra", "flextable", "officer",
+
+  # Parallel execution, sensitivity, spatial statistics, and regression
+  "future.apply", "lhs", "spdep", "lme4", "lmerTest", "broom",
+  "broom.mixed", "performance", "survival"
+
 )
 
 pkgs <- unique(pkgs)

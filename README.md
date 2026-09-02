@@ -1,86 +1,124 @@
-# Dengue establishment risk in Türkiye under CMIP6 scenarios — reproducibility package
+# Dengue threshold-crossing risk in Türkiye under CMIP6 scenarios — reproducibility package
 
-R pipeline for a **continuous-time Markov chain (CTMC) spark-phase birth–death model** that estimates the probability an imported dengue infection establishes a local transmission chain (reaching an operational threshold of τ = 30 concurrent infectious humans) across five climatically distinct sentinel districts in Türkiye, under CMIP6 **SSP1-2.6, SSP2-4.5 and SSP5-8.5** scenarios over **2025–2075**.
+This repository contains the R pipeline, processed inputs, canonical model outputs, and documentation for the dengue CTMC analysis reported in Okan Derin's 2026 doctoral thesis, *“Türkiye'de Aedes Kaynaklı Arbovirüs Hassasiyeti: İklim Değişikliği Senaryolarıyla Epidemiyolojik Bir İnceleme.”*
 
-This repository accompanies the manuscript *"A stochastic model of dengue establishment following importation into Türkiye under CMIP6 climate scenarios"* and its Supporting Information (S1–S5 Files, S1 Data).
+The study uses a continuous-time Markov chain (CTMC) spark-phase birth–death model to estimate the probability that a transmission chain initiated by one imported dengue virus infection reaches an operational threshold of \(\tau=30\) concurrent infectious humans before extinction. The analysis covers five climatically distinct sentinel districts in Türkiye under CMIP6 SSP1-2.6, SSP2-4.5, and SSP5-8.5 scenarios over 2025–2075 (51 calendar years; 612 months).
 
-Sentinel districts: **Kartal/İstanbul** (*Ae. albopictus*), **Fethiye/Muğla** (*Ae. albopictus*), **Hopa/Artvin** (*Ae. aegypti*), **Zonguldak Merkez** (*Ae. aegypti* frontier scenario), **Eğirdir/Isparta** (*Ae. albopictus*).
+Reaching the threshold is interpreted as attainment of a prespecified operational event, not as proof of endemic persistence.
 
----
+Sentinel climate profiles and representative species assignments:
+
+- **Kartal/İstanbul:** *Aedes albopictus*
+- **Fethiye/Muğla:** *Aedes albopictus*
+- **Hopa/Artvin:** *Aedes aegypti*
+- **Zonguldak Merkez:** *Aedes aegypti* Black Sea corridor scenario; not a confirmed district record
+- **Eğirdir/Isparta:** *Aedes albopictus*
+
+Species assignments determine the species-specific thermal-performance parameters used by the model; they do not establish district-level dominance or exclude sympatry.
 
 ## Repository layout
 
-```
+```text
 .
-├── R/                     # analysis pipeline (numbered by stage)
-│   ├── 01_setup/          # init.R, packages.R, paths.R, global_options.R
-│   ├── 02_data/           # climate bias-correction, importation pressure, trait params, travel weights
-│   ├── 03_models/         # CTMC spark model, nested Monte Carlo, parameter functions, sensitivity
-│   ├── 04_results/        # per-SSP generation, figures, regression, verification & check scripts
-│   ├── run_all.R          # end-to-end driver
-│   └── data_build_once_run.R
-├── data_processed/        # non-proprietary processed inputs (bias-corrected climate summaries,
-│                          #   trait_params_*.csv, travel_weights_*, seasonality, sentinel_species, GBD inputs)
-├── data_raw/              # small public inputs + README documenting CDS queries for raw NetCDF (NOT redistributed)
-├── outputs/               # district–month–year model outputs, tables, validation, figures
-│   ├── sspXXX/simulation/ # ctmc_spark_{monthly,yearly,horizon}_2025_2075_rep1000.rds  (per scenario)
-│   ├── sspXXX/validation/ # Stage 1 / Stage 2 (Jensen) verification
-│   └── tables/            # cross-scenario tables (regression, PRCC, T_opt, Poisson–Bernoulli, k_vpd)
-├── shiny_dengue_app/      # companion Shiny app (projection browser, What-If, arbitrary-location risk)
-├── renv.lock              # locked package environment (see "Reproducing")
+├── R/
+│   ├── 00_maintenance/    # consistency, release, and maintenance utilities
+│   ├── 01_setup/          # package, path, and global-option configuration
+│   ├── 02_data/           # climate, population, importation, and trait processing
+│   ├── 03_models/         # CTMC, Monte Carlo, parameter, and sensitivity functions
+│   ├── 04_results/        # result generation, validation, regression, tables, and figures
+│   ├── data_build_once_run.R
+│   └── run_all.R          # end-to-end workflow driver
+├── data_raw/              # redistributable source inputs and source-query documentation
+├── data_processed/        # processed inputs used by the analytical pipeline
+├── outputs/
+│   ├── _canonical/        # canonical outputs used for reporting
+│   ├── cross_scenario/    # cross-scenario outputs
+│   └── tables/            # derived result tables
+├── figures_standalone/    # publication and conceptual figures
+├── reports/               # report-generation files
+├── shiny_dengue_app/      # companion interactive application
 ├── CITATION.cff
 ├── LICENSE
 └── README.md
 ```
 
-## Model, in brief
+## Model summary
 
-- **Spark-phase CTMC** on the number of infectious humans I ∈ {0, …, τ}, τ = 30; establishment probability from the finite-threshold gambler's-ruin formula (S1 File, Eq. 1).
-- **Local transmission rate** λ(i=1)(T,RH) via a reduced Ross–Macdonald vectorial-capacity construction; R₀ = λ(i=1)/γ, γ = 0.20 day⁻¹ (S1 File, Eq. 2).
-- **Temperature-/humidity-dependent vector biology**: Brière biting rate and EIP development, quadratic lifespan, and a VPD-based mortality multiplier μ_v = (1/lf(T))·exp(k_vpd·(VPD − VPD_ref)), VPD_ref = 1.0 kPa, k_vpd = 0.5 kPa⁻¹ (S1/S2 Files, Eq. 3).
-- **EIP heterogeneity + Jensen correction**: individual EIP ~ LogNormal at fixed T; nested Monte Carlo (inner n_mc = 2,000) estimates E[P_est] rather than P_est(E[EIP]) (S1 File, Eq. 4).
-- **Importation pressure**: province-level foreign-arrival volume × GBD 2023 travel-weighted source-country incidence × seasonality × viremia-at-arrival, as a non-homogeneous Poisson process (S2 File, Eq. 5a–5g).
-- **Outer replication** n_rep = 1,000 is seed-controlled reproducibility, *not* parametric uncertainty; parametric uncertainty is assessed separately by LHS–PRCC and OAT (S4 File).
+- **Spark-phase CTMC:** \(I\in\{0,\ldots,\tau\}\), with \(I=0\) and \(I=\tau=30\) treated as absorbing extinction and operational threshold states, respectively. The finite-threshold probability is obtained from the birth–death gambler's-ruin solution.
+- **Local transmission:** the per-infectious-individual rate \(\lambda_1(T,RH)\) follows a reduced Ross–Macdonald-type formulation, with \(R_0=\lambda_1/\gamma\) and \(\gamma=0.20\ \mathrm{day}^{-1}\).
+- **Climate-sensitive vector biology:** biting, development, lifespan, and vector survival through the extrinsic incubation period (EIP) vary with temperature; vector mortality is additionally modified by vapour-pressure deficit.
+- **EIP heterogeneity:** the main estimator averages EIP-dependent local-transmission rates over 2,000 inner draws and then evaluates the finite-threshold probability at the averaged rate. A separate Jensen-reference estimator calculates the average of the draw-specific threshold probabilities to quantify nonlinear-averaging sensitivity.
+- **Importation pressure:** source-country incidence, province-level foreign-arrival volume, travel seasonality, effective exposure duration, and the fraction contributing viraemic exposure are combined in a time-varying Poisson importation process.
+- **Risk aggregation:** Poisson thinning combines importation intensity with the single-import threshold-crossing probability to obtain monthly and 2025–2075 horizon risks.
+- **Uncertainty and sensitivity:** the 1,000 outer repetitions reduce Monte Carlo error and are not a parametric uncertainty distribution. Parameter sensitivity is assessed separately using one-at-a-time analyses and LHS–PRCC.
 
-## Pipeline order
+The complete mathematical formulation, assumptions, and parameter definitions are provided in the doctoral thesis. The thesis document and manuscript working files are intentionally excluded from this code-and-data repository.
 
-```r
-# From the repository root, with the R project open:
-source("R/01_setup/init.R")          # loads packages.R + paths.R + options
-source("R/data_build_once_run.R")    # 02_data: bias correction, importation pressure, trait params, ...
-source("R/run_all.R")                # 03_models + 04_results: simulate all SSPs, tables, figures
+## Reproducing the analysis
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/okanderin/dengue-ctmc-turkiye.git
+cd dengue-ctmc-turkiye
 ```
 
-Key stage scripts: `R/03_models/ctmc_spark.R`, `ctmc_spark_monte_carlo.R`, `parameter_functions.R`; results in `R/04_results/01_generate_ssp_outputs.R`, `02_all_ssp_generate.R`, `bulgular.Rmd`.
+Open `r_project_tez.Rproj` in RStudio or start R from this directory.
+
+### 2. Install the required R packages
+
+R version 4.3 or later is recommended. Required packages are declared centrally in `R/01_setup/packages.R`. The setup script reports any missing packages and provides an installation command.
+
+Start by installing `here` if it is not already available:
+
+```r
+install.packages("here")
+source("R/01_setup/init.R", encoding = "UTF-8")
+```
+
+> **Environment note:** package versions are not currently pinned because this release does not contain an `renv.lock` file. For a versioned archival release, adding and validating an `renv.lock` file is recommended.
+
+### 3. Run the pipeline
+
+From a clean R session at the repository root:
+
+```r
+source("R/run_all.R", encoding = "UTF-8")
+```
+
+The default driver runs data preparation, all three SSP production runs, the Jensen-reference run in an isolated R process, result generation, and report rendering. Individual stages can be selected before sourcing the driver:
+
+```r
+STAGES <- c("04")
+source("R/run_all.R", encoding = "UTF-8")
+```
+
+Available stages are `"02"` (data preparation), `"03"` (production and Jensen-reference model runs), `"04"` (tables, figures, and internal checks), and `"rmd"` (report rendering). A complete three-scenario model run is computationally intensive and may take approximately 45–60 hours on the reference system described during development. Running stage `"04"` alone requires the corresponding per-scenario model outputs to have been generated already.
 
 ## Verification and sensitivity
 
-- **Two-stage verification** (`R/run_all.R` → `validation_two_stage*.R`, `R/04_results/mc_validation_vs_analytic.R`): Stage 1 reproduces the analytic finite-threshold solution to machine precision (σ_EIP = 0) and against an independent brute-force CTMC; Stage 2 quantifies the Jensen bias. Outputs in `outputs/sspXXX/validation/`.
-- **Poisson–binomial check** (`R/04_results/ek_a4_poisson_bernoulli_check.R`): regenerates Appendix Table A.4 — the exact heterogeneous-Bernoulli complement product vs the Poisson cumulative-hazard approximation — from the monthly outputs. Result: `outputs/tables/tbl_ek_a4_poisson_bernoulli.csv`.
-- **k_vpd sensitivity** (`R/04_results/kvpd_sensitivity_check.R`): recomputes P_est from each district's actual T/RH trajectory at k_vpd = 0.3, 0.5, 0.8 kPa⁻¹ under all three scenarios, and reports the effect on P_horizon and the district ranking. Results: `outputs/tables/tbl_kvpd_sensitivity.csv`, `tbl_kvpd_reference_check.csv`.
-- **LHS–PRCC / OAT** (`R/03_models/sensitivity_ctmc_mc.R`, `LHS_PRCC_EN_ref_1-1.R`, `OAT_*`): global and one-at-a-time sensitivity.
+- **Finite-threshold numerical verification:** `R/04_results/core/01_generate_ssp_outputs.R` compares stored production estimates with the analytical finite-threshold birth–death expression evaluated from the corresponding stored mean local-transmission rates. This is an internal software check, not validation against observed dengue outcomes.
+- **EIP estimator sensitivity:** `R/04_results/validation/stage2_eip_estimator_sensitivity.R` compares the primary estimator, \(P_\tau(E[\lambda(EIP)])\), with the Jensen-reference estimator, \(E[P_\tau(\lambda(EIP))]\), under EIP heterogeneity.
+- **Poisson-thinning identity check:** `R/04_results/validation/ek_a4_poisson_bernoulli_check.R` checks the equivalence between the complement product of monthly non-occurrence probabilities and the cumulative-hazard expression.
+- **VPD sensitivity:** `R/04_results/sensitivity/kvpd_sensitivity_check.R` evaluates alternative VPD–mortality coefficients.
+- **Threshold sensitivity:** `R/04_results/sensitivity/10_tau_threshold_sensitivity.R` evaluates alternative operational thresholds.
+- **OAT and LHS–PRCC:** scripts in `R/03_models/` and `R/04_results/sensitivity/` implement local and global sensitivity analyses.
 
-## Reproducing the environment
-
-Package versions are pinned with [`renv`](https://rstudio.github.io/renv/):
-
-```r
-install.packages("renv")
-renv::restore()      # installs the exact package versions from renv.lock
-```
-
-R ≥ 4.3 is assumed. A full run takes roughly 45–60 hours on an Intel i7-6700HQ / 16 GB RAM.
+Canonical reporting outputs are stored under `outputs/_canonical/`.
 
 ## Data availability
 
-- **Processed inputs** used by the pipeline are in `data_processed/` (CC BY 4.0).
-- **Raw CMIP6 (CNRM-CM6-1-HR) and ERA5-Land NetCDF** are **not redistributed** because of size and licensing; `data_raw/README_data.md` documents the exact Copernicus Climate Data Store queries needed to retrieve them.
-- **GBD 2023** dengue incidence inputs are included under `data_raw/population/GBD_2023_DATA/` with the IHME citation.
+- Processed inputs used by the pipeline are provided in `data_processed/`.
+- Canonical model outputs underlying the reported results are provided in `outputs/_canonical/`.
+- Large raw CNRM-CM6-1-HR and ERA5-Land NetCDF files are not redistributed. Retrieval information and available query materials are provided under `data_raw/climate/`.
+- Public demographic, tourism, geographic, and disease-burden inputs included in `data_raw/` remain subject to the terms and attribution requirements of their original providers.
+
+A versioned archival release with a persistent identifier should be cited once available.
 
 ## Citation
 
-See `CITATION.cff`. Please cite both this software and the associated PLOS NTD article.
+Citation metadata are provided in `CITATION.cff`; its preferred citation is the 2026 doctoral thesis on which this repository is based.
 
 ## Licence
 
-Code: MIT. Processed data and outputs: CC BY 4.0. Raw climate data: terms of the original providers. See `LICENSE`.
+The analysis code is released under the MIT License. Processed data and outputs are released under CC BY 4.0 where redistribution is permitted. Raw or externally sourced data remain subject to the terms of their original providers. See `LICENSE` and the source-specific documentation for details.

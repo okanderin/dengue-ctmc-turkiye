@@ -1,7 +1,7 @@
 # Temiz surum
 
 Olusturuldu : 2026-08-21 16:32 +0300
-Kaynak      : C:/Users/oderin/Documents/drive/000000_tezim/0000_tezim/r_project_tez
+Kaynak      : yerel calisma kopyasi (kisisel dosya yolu yayimdan cikarildi)
 R surumu    : R version 4.5.2 (2025-10-31 ucrt)
 Kopyalanan  : 1292 dosya
 Dislanan    : 26413 dosya

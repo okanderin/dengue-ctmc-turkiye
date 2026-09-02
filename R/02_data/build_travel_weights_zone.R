@@ -42,7 +42,9 @@
 
 # ---- 0) Bootstrap: detect ROOT + init -----------------------------------
 suppressPackageStartupMessages({
-  if (!requireNamespace("rprojroot", quietly = TRUE)) install.packages("rprojroot")
+  if (!requireNamespace("rprojroot", quietly = TRUE))
+    stop("Package 'rprojroot' is required; run R/01_setup/init.R first.",
+         call. = FALSE)
 })
 
 if (!exists("ROOT")) {
@@ -63,8 +65,12 @@ suppressPackageStartupMessages({
   library(readr)
   library(readxl)
   library(tidyr)
-  if (!requireNamespace("janitor",  quietly = TRUE)) install.packages("janitor")
-  if (!requireNamespace("stringi",  quietly = TRUE)) install.packages("stringi")
+  if (!requireNamespace("janitor", quietly = TRUE))
+    stop("Package 'janitor' is required; run R/01_setup/init.R first.",
+         call. = FALSE)
+  if (!requireNamespace("stringi", quietly = TRUE))
+    stop("Package 'stringi' is required; run R/01_setup/init.R first.",
+         call. = FALSE)
   library(janitor)
   library(stringi)
 })

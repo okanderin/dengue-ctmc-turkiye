@@ -1,4 +1,4 @@
----
+<!-- Standalone R Markdown fragment; intentionally has no YAML front matter. -->
 # ══════════════════════════════════════════════════════════════════
 #  EK ANALİZ BLOKLARI — Şekil 13, 14, 15 ve Tablo 13
 #  m = 0.5 vs m = 1.0 karşılaştırmalı duyarlılık analizleri

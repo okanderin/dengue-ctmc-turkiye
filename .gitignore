@@ -1,17 +1,20 @@
 # =============================================================================
-# .gitignore — dengue_ctmc_spark_turkiye
+# .gitignore — dengue-ctmc-turkiye
+# Public reproducibility repository: code, processed inputs, selected small
+# source inputs, and canonical reporting outputs are retained.
 # =============================================================================
 
-# ── R session / history ──────────────────────────────────────────────────────
+# ---- R / RStudio session state ----------------------------------------------
 .Rproj.user/
 .Rhistory
 .RData
-.Ruserdata
-.RDataTmp
 .RDataTmp*
-*.RData.bak
+.Ruserdata
+.Renviron
+.Renviron.*
 
-# ── renv: keep renv.lock and the activate script, ignore the local library ────
+# ---- renv local state --------------------------------------------------------
+# Keep renv.lock, .Rprofile, and renv/activate.R if they are created later.
 renv/library/
 renv/local/
 renv/cellar/
@@ -19,74 +22,111 @@ renv/staging/
 renv/python/
 renv/sandbox/
 
-# ── Raw climate data — NOT redistributed (size + licensing) ───────────────────
-# Retrieve via the Copernicus CDS queries documented in data_raw/README_data.md
-# (S1 Data: raw CMIP6 and ERA5-Land NetCDF are not redistributed)
+# ---- Operating-system and editor files --------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+*~
+*.swp
+*.swo
+*.tmp
+*.temp
+*.orig
+*.bak
+*.bak_*
+*.bak*
+
+# ---- Credentials and local configuration -----------------------------------
+.env
+.env.*
+*.pem
+*.key
+credentials/
+secrets/
+
+# ---- R Markdown / knitr / Quarto generated files ----------------------------
+*_files/
+*_cache/
+**/figure-html/
+**/figure-latex/
+.quarto/
+*.utf8.md
+*.knit.md
+*.html
+
+# ---- LaTeX build products ----------------------------------------------------
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.lof
+*.lot
+*.log
+*.nav
+*.out
+*.snm
+*.synctex.gz
+*.toc
+*.vrb
+
+# ---- Manuscript and thesis working directories ------------------------------
+# These files remain on the local/Drive working copy but are not published in
+# the code-and-data repository. No physical move is required.
+/manuscript/
+/PLOS_latex_template/
+/errata/
+
+# ---- Root-level manuscript/build artifacts ----------------------------------
+# Publication figures intended for Git belong in figures_standalone/.
+/*.docx
+/*.pdf
+/*.zip
+/*.jpg
+/*.jpeg
+/*.png
+/*.svg
+
+# ---- Raw climate files: large and/or provider-controlled ---------------------
+# Keep the small retrieval scripts, receipts, and documentation in data_raw/;
+# only large climate data formats are excluded.
 *.nc
 *.nc4
 *.grib
 *.grb
 
-# ── knitr / R Markdown render caches ──────────────────────────────────────────
-*_files/
-*_cache/
-**/figure-html/
-**/figure-latex/
-
-# ── Ad-hoc "new folder" and backup directories — do not track ─────────────────
-Yeni klasör/
-**/Yeni klasör/
-eski_v3_yedek/
-**/eski_v3_yedek/
-
-# ── Optional: rep1 single-draw sweep outputs (keep the rep1000 outputs) ───────
-# Uncomment to slim the repository; rep1000 files are the reproducible ones.
-# outputs/**/*_rep1.csv
-# outputs/**/*_rep1.rds
-
-# ── OS / editor junk ──────────────────────────────────────────────────────────
-.DS_Store
-Thumbs.db
-*~
-*.swp
-desktop.ini
-bulgular.html
-desktop.ini
-/*.docx
-/*.jpg
-/convexity_*.png
-/kavramsal_cerceve_*
-/stokastik_gecis_*
-/stochastic_concept.png
-/fig_prcc_pm1.png
-/diagram_*.svg
-/diagram_*.html
-/r_project_tez_*.png
-/r_project_tez_*.svg
-/pipeline_diagram.R
-
-# --- temiz surumde eklendi ---
-Yeni_klasor/
-**/Yeni_klasor/
-_to_delete/
-reports/_rendered/
-*.html
-!README*.html
-
-# --- github minimal reproducibility repo (2026-08) ---
-# Canli/tekrarli calisma kopyalari; outputs/_canonical dondurulmus surumdur
-/outputs/ssp126/
-/outputs/ssp245/
-/outputs/ssp585/
-/outputs/_frozen_unmatched/
-/outputs/_audit/
-
-# Pipeline ara-onbellek / calistirma loglari - yeniden uretilir
+# ---- Re-creatable pipeline state ---------------------------------------------
 /data_interim/
 /logs/
 
-# Henuz yayina hazir olmayan tez/makale taslaklari
-/manuscript/
+# Keep outputs/_canonical/, outputs/cross_scenario/, and outputs/tables/.
+# Exclude mutable per-run working trees and audit/temporary output directories.
+/outputs/ssp126/
+/outputs/ssp245/
+/outputs/ssp585/
+/outputs/_audit/
+/outputs/_frozen_unmatched/
+/outputs/_to_delete/
+/outputs/convexity_*.png
 
-# Bu depoya ozel gecici temizlik klasoru
+# ---- Rendered reports --------------------------------------------------------
+/reports/_rendered/
+
+# ---- Legacy, temporary, and ad-hoc folders ----------------------------------
+**/_archive/
+**/archive/
+**/legacy_*/
 /_to_delete/
+/Yeni klasör/
+/Yeni_klasor/
+**/Yeni klasör/
+**/Yeni_klasor/
+**/eski_v3_yedek/
+
+# ---- Local pipeline-diagram scratch files at repository root ----------------
+/pipeline_diagram.R
+/diagram_*.html
+/diagram_*.svg
+
+# ---- Shiny deployment metadata ----------------------------------------------
+shiny_dengue_app/rsconnect/

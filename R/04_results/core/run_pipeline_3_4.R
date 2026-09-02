@@ -25,8 +25,11 @@
 ## =========================================================
 
 suppressPackageStartupMessages({
-  if (!requireNamespace("rprojroot",   quietly = TRUE)) install.packages("rprojroot")
-  if (!requireNamespace("future.apply", quietly = TRUE)) install.packages("future.apply")
+  if (!requireNamespace("rprojroot", quietly = TRUE) ||
+      !requireNamespace("future.apply", quietly = TRUE)) {
+    stop("Packages 'rprojroot' and 'future.apply' are required; ",
+         "run R/01_setup/init.R first.", call. = FALSE)
+  }
   library(future.apply)
 })
 

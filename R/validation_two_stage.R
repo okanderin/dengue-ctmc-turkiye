@@ -1,3 +1,8 @@
+# LEGACY EXPLORATORY DIAGNOSTIC
+# This script is retained for provenance but is not called by R/run_all.R.
+# Its stochastic-versus-deterministic EIP comparison is not the thesis Stage 2
+# estimator-order comparison. Use
+# R/04_results/validation/stage2_eip_estimator_sensitivity.R for that analysis.
 # ==========================================================
 # validation_two_stage.R
 # Two-stage CTMC spark model validation

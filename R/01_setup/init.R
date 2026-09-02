@@ -1,7 +1,7 @@
 #source("R/01_setup/init.R")
 # # -------------------------------------------------------------------
 # init.R
-# Project initializer for r_project_tez
+# Project initializer for dengue-ctmc-turkiye
 # Guarantees that DIR_* objects are visible in analysis scripts
 # -------------------------------------------------------------------
 
@@ -21,20 +21,24 @@ if (!requireNamespace("here", quietly = TRUE)) {
   )
 }
 
-# --- Determine ROOT
-ROOT <- here::here()
+# --- Determine and validate ROOT
+# Validate the repository by stable marker files, not by the local directory
+# name. This lets a normal `git clone` into `dengue-ctmc-turkiye/` work.
+ROOT <- normalizePath(here::here(), winslash = "/", mustWork = TRUE)
 
-if (basename(ROOT) != "r_project_tez") {
-  candidate <- file.path(ROOT, "r_project_tez")
-  if (dir.exists(candidate)) {
-    ROOT <- candidate
-  } else {
-    stop(
-      "Project root could not be validated as 'r_project_tez'.\n",
-      "Detected ROOT: ", ROOT,
-      call. = FALSE
-    )
-  }
+root_markers <- c(
+  "r_project_tez.Rproj",
+  file.path("R", "01_setup", "packages.R"),
+  file.path("R", "01_setup", "paths.R")
+)
+missing_markers <- root_markers[!file.exists(file.path(ROOT, root_markers))]
+if (length(missing_markers) > 0L) {
+  stop(
+    "Project root validation failed. Missing: ",
+    paste(missing_markers, collapse = ", "),
+    "\nDetected ROOT: ", ROOT,
+    call. = FALSE
+  )
 }
 
 SETUP_DIR <- file.path(ROOT, "R", "01_setup")
