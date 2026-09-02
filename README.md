@@ -65,18 +65,17 @@ cd dengue-ctmc-turkiye
 
 Open `r_project_tez.Rproj` in RStudio or start R from this directory.
 
-### 2. Install the required R packages
+### 2. Restore the R environment
 
-R version 4.3 or later is recommended. Required packages are declared centrally in `R/01_setup/packages.R`. The setup script reports any missing packages and provides an installation command.
-
-Start by installing `here` if it is not already available:
+The reproducibility environment is recorded in `renv.lock` using R 4.6.1. After cloning, open the project in RStudio and restore the exact package versions:
 
 ```r
-install.packages("here")
+install.packages("renv") # needed only when renv is not already installed
+renv::restore()
 source("R/01_setup/init.R", encoding = "UTF-8")
 ```
 
-> **Environment note:** package versions are not currently pinned because this release does not contain an `renv.lock` file. For a versioned archival release, adding and validating an `renv.lock` file is recommended.
+Required packages are also declared centrally in `R/01_setup/packages.R`; the setup script reports any package still missing after restoration. A newer compatible R version may work, but R 4.6.1 should be used for the closest reproduction of the locked environment.
 
 ### 3. Run the pipeline
 
