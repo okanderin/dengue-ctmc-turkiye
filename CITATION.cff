@@ -28,6 +28,8 @@ version: "1.0.0"
 
 date-released: "2026-09-11"
 
+doi: "10.5281/zenodo.22707213"
+
 authors:
   - family-names: Derin
     given-names: Okan
