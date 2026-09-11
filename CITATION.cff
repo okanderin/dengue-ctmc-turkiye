@@ -1,49 +1,49 @@
 cff-version: 1.2.0
 
-message: “If you use this software or its outputs, please cite both the software archive and the associated doctoral thesis.”
+message: "If you use this software or its outputs, please cite both the software archive and the associated doctoral thesis."
 
-title: “dengue_ctmc_spark_turkiye: A CTMC spark-phase model of dengue threshold crossing in Türkiye under CMIP6 scenarios”
+title: "dengue_ctmc_spark_turkiye: A CTMC spark-phase model of dengue threshold crossing in Türkiye under CMIP6 scenarios"
 
 abstract: >-
-Reproducible R workflow for a continuous-time Markov chain (CTMC)
-spark-phase birth–death model estimating the probability that a
-transmission chain initiated by an imported dengue infection reaches a
-prespecified operational threshold before extinction across five sentinel
-districts in Türkiye under CMIP6 SSP1-2.6, SSP2-4.5, and SSP5-8.5 scenarios
-during 2025–2075. The repository includes climate bias correction,
-importation-pressure construction, analytical finite-threshold calculations,
-Monte Carlo propagation of extrinsic-incubation-period heterogeneity,
-numerical verification, sensitivity analyses, and post-hoc regression
-summaries. Threshold attainment is an operational marker of a substantial
-early autochthonous transmission chain and does not represent endemic
-establishment or long-term persistence.
+  Reproducible R workflow for a continuous-time Markov chain (CTMC)
+  spark-phase birth-death model estimating the probability that a
+  transmission chain initiated by an imported dengue infection reaches a
+  prespecified operational threshold before extinction across five sentinel
+  districts in Türkiye under CMIP6 SSP1-2.6, SSP2-4.5, and SSP5-8.5 scenarios
+  during 2025-2075. The repository includes climate bias correction,
+  importation-pressure construction, analytical finite-threshold calculations,
+  Monte Carlo propagation of extrinsic-incubation-period heterogeneity,
+  numerical verification, sensitivity analyses, and post-hoc regression
+  summaries. Threshold attainment is an operational marker of a substantial
+  early autochthonous transmission chain and does not represent endemic
+  establishment or long-term persistence.
 
 type: software
 
-repository-code: “https://github.com/okanderin/dengue-ctmc-turkiye”
+repository-code: "https://github.com/okanderin/dengue-ctmc-turkiye"
 
 license: MIT
 
-version: “1.0.0”
+version: "1.0.0"
 
-date-released: “2026-09-11”
+date-released: "2026-09-11"
 
 authors:
-
-* family-names: Derin
+  - family-names: Derin
     given-names: Okan
-    affiliation: “Department of Epidemiology, Graduate School of Health Sciences, İstanbul Medipol University, İstanbul, Türkiye”
-* family-names: Yaylalı
+    affiliation: "Department of Epidemiology, Graduate School of Health Sciences, İstanbul Medipol University, İstanbul, Türkiye"
+
+  - family-names: Yaylalı
     given-names: Emine
-    affiliation: “Department of Industrial Engineering, Istanbul Technical University, İstanbul, Türkiye”
+    affiliation: "Department of Industrial Engineering, Istanbul Technical University, İstanbul, Türkiye"
 
 preferred-citation:
-type: thesis
-thesis-type: “Doctoral thesis”
-title: “Türkiye’de Aedes Kaynaklı Arbovirüs Hassasiyeti: İklim Değişikliği Senaryolarıyla Epidemiyolojik Bir İnceleme”
-authors:
-- family-names: Derin
-given-names: Okan"
-year: 2026
-institution:
-name: “İstanbul Medipol University”
+  type: generic
+  title: "Türkiye'de Aedes Kaynaklı Arbovirüs Hassasiyeti: İklim Değişikliği Senaryolarıyla Epidemiyolojik Bir İnceleme"
+  authors:
+    - family-names: Derin
+      given-names: Okan
+  thesis-type: "Doctoral thesis"
+  institution:
+    name: "İstanbul Medipol University"
+  year: 2026
