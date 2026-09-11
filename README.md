@@ -16,6 +16,13 @@ Sentinel climate profiles and representative species assignments:
 
 Species assignments determine the species-specific thermal-performance parameters used by the model; they do not establish district-level dominance or exclude sympatry.
 
+## Archived release
+
+The version corresponding to the PLOS Neglected Tropical Diseases submission
+is archived in Zenodo:
+
+https://doi.org/10.5281/zenodo.22707213
+
 ## Repository layout
 
 ```text
